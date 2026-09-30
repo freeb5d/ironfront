@@ -36,7 +36,8 @@ Bleeding-edge builds of every commit are also available as artifacts on the [Act
 - Veterancy: units earn ranks (veteran, elite, heroic) from kills and get stronger, heroic units self-repair
 - Commander points and powers (per nation): targeted strike, reinforcements, field repair
 - Control groups, double-click select, attack-move, scoreboard at the end of each match
-- Settings for volume, shadows, fullscreen and edge scrolling (saved between sessions)
+- Match options in the lobby: starting money, game speed, unit limit, starting army, teams (free for all, 2 teams of 4, 4 teams of 2), commander powers on/off, bot difficulty
+- Settings (saved between sessions): volume, fullscreen, VSync, interface scale, FPS counter, shadows, reduced effects for weak computers, edge scrolling, camera and zoom speed, always-visible health bars
 
 ## Nations
 
