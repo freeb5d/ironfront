@@ -49,6 +49,21 @@ func _on_node_added(n: Node) -> void:
 		n.pressed.connect(play_click)
 
 
+## Saves a screenshot (only when a real renderer is running). Used by the CI visual check.
+func shot(label: String) -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	await RenderingServer.frame_post_draw
+	var img: Image = get_viewport().get_texture().get_image()
+	if img == null:
+		return
+	var dir: String = OS.get_environment("SHOT_DIR")
+	if dir == "":
+		dir = "user://shots"
+	DirAccess.make_dir_recursive_absolute(dir)
+	img.save_png("%s/%s.png" % [dir, label])
+
+
 func play_click() -> void:
 	if _click_player != null:
 		_click_player.play()

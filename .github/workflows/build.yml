@@ -35,6 +35,22 @@ jobs:
           grep -q "main_visible=true" auto.log
           if grep -q "SCRIPT ERROR" auto.log; then exit 1; fi
 
+      - name: Visual check (software OpenGL, takes screenshots of every screen)
+        continue-on-error: true
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq xvfb libgl1-mesa-dri libglx-mesa0 libgl1 libegl1 libxcursor1 libxinerama1 libxi6 libxrandr2 libasound2 libpulse0 > /dev/null
+          mkdir -p shots
+          SHOT_DIR=$PWD/shots LIBGL_ALWAYS_SOFTWARE=1 timeout 300 xvfb-run -a -s "-screen 0 1280x720x24" godot --path . --rendering-driver opengl3 --resolution 1280x720 -- --autotest 2>&1 | tee vis.log || true
+          ls -la shots
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots
+          path: shots/
+          if-no-files-found: warn
+
       - name: Export Windows
         run: |
           mkdir -p build/windows build/linux

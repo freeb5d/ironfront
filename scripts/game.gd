@@ -82,10 +82,11 @@ func _ready() -> void:
 	else:
 		srv_ready.rpc_id(1)
 	if "--autotest" in OS.get_cmdline_user_args():
-		get_tree().create_timer(6.0).timeout.connect(_autotest_finish)
+		get_tree().create_timer(5.0).timeout.connect(_autotest_finish)
 
 
 func _autotest_finish() -> void:
+	await Net.shot("10_game_base")
 	# exercise the same code paths real input uses
 	for id in info:
 		if info[id][1] == my_slot and _is_unit(info[id][0]):
@@ -94,15 +95,30 @@ func _autotest_finish() -> void:
 	_train(1)
 	_train(2)
 	_box_select(Vector2(0, 0), Vector2(1280, 720))
+	await get_tree().create_timer(0.4).timeout
+	await Net.shot("11_selection")
 	_right_click(Vector2(640, 360))
 	_finish_drag(Vector2(100, 100))
+	# overview of the whole map
+	var keep_pivot: Vector3 = cam_pivot.position
+	zoom = 140.0
+	_update_cam()
+	cam_pivot.position = Vector3.ZERO
+	await get_tree().create_timer(0.4).timeout
+	await Net.shot("12_overview")
+	zoom = 50.0
+	_update_cam()
+	cam_pivot.position = keep_pivot
 	# force the combat visuals that a real fight would trigger
 	var any_id: int = views.keys()[0] if not views.is_empty() else -1
-	_spawn_shot(any_id, Vector3(0, 0, 0), Vector3(12, 0, 3), 1)
-	_spawn_shot(any_id, Vector3(0, 0, 0), Vector3(20, 0, -4), 2)
+	var at: Vector3 = keep_pivot
+	_spawn_shot(any_id, at + Vector3(-8, 0, 0), at + Vector3(14, 0, 3), 1)
+	_spawn_shot(any_id, at + Vector3(-6, 0, 4), at + Vector3(18, 0, -4), 2)
+	_burst(at + Vector3(14, 1, 3), 20, 0.5, 0.3, Color(1, 0.5, 0.1), 8.0, Vector3(0, -9, 0))
+	await get_tree().create_timer(0.15).timeout
+	await Net.shot("13_combat")
 	_update_projectiles(0.05)
 	_update_projectiles(1.0)
-	_burst(Vector3(5, 1, 5), 20, 0.5, 0.3, Color(1, 0.5, 0.1), 8.0, Vector3(0, -9, 0))
 	# sound, hotkeys, groups, stop and the scoreboard
 	for k in ["shot", "cannon", "boom", "click", "coin", "capture", "alarm", "ready"]:
 		_play3d(k, Vector3(3, 0, 3), -10.0)
@@ -111,8 +127,6 @@ func _autotest_finish() -> void:
 	_group_key(1, false)
 	_center_on_hq()
 	_stop_selected()
-	_show_end("VICTORY", true)
-	print("AUTOTEST FEATURES stats=%d groups=%d" % [stats.size(), groups.size()])
 	# simulate a click-drag pan
 	drag_start = Vector2(400, 300)
 	pan_anchor = _ground_point(drag_start)
@@ -121,8 +135,15 @@ func _autotest_finish() -> void:
 	dragging = true
 	await get_tree().create_timer(0.3).timeout
 	dragging = false
+	_show_end("VICTORY", true)
+	print("AUTOTEST FEATURES stats=%d groups=%d" % [stats.size(), groups.size()])
+	await get_tree().create_timer(0.3).timeout
+	await Net.shot("14_scoreboard")
+	end_layer.visible = false
 	pause_layer.visible = true
-	await get_tree().create_timer(2.0).timeout
+	await get_tree().create_timer(0.3).timeout
+	await Net.shot("15_pause")
+	await get_tree().create_timer(1.0).timeout
 	print("AUTOTEST OK views=%d" % views.size())
 	get_tree().quit(0)
 

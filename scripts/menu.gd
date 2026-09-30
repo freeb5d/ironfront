@@ -39,10 +39,22 @@ func _ready() -> void:
 	_refresh()
 
 	if "--autotest" in OS.get_cmdline_user_args():
-		print("AUTOTEST MENU main_visible=%s" % screens["main"].visible)
-		pending = OFFLINE
-		chosen = "USA"
-		_confirm.call_deferred()
+		_run_autotest()
+
+
+func _run_autotest() -> void:
+	print("AUTOTEST MENU main_visible=%s" % screens["main"].visible)
+	await get_tree().create_timer(0.6).timeout
+	await Net.shot("01_main_menu")
+	_show("settings")
+	await get_tree().create_timer(0.3).timeout
+	await Net.shot("02_settings")
+	_pick(OFFLINE)
+	await get_tree().create_timer(0.3).timeout
+	await Net.shot("03_nation_select")
+	pending = OFFLINE
+	chosen = "USA"
+	_confirm()
 
 
 # ------------------------------------------------------------------ helpers
