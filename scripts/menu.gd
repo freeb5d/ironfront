@@ -74,12 +74,18 @@ func _run_autotest() -> void:
 	_show("settings")
 	await get_tree().create_timer(0.3).timeout
 	await Net.shot("02_settings")
-	_pick(OFFLINE)
-	await get_tree().create_timer(0.3).timeout
+	_pick(HOST)
+	await get_tree().create_timer(0.5).timeout
 	await Net.shot("03_nation_select")
-	pending = OFFLINE
+	pending = HOST
 	chosen = "USA"
-	_confirm()
+	_confirm() # opens the multiplayer lobby
+	await get_tree().create_timer(0.4).timeout
+	for i in range(1, Data.MAX_SLOTS):
+		Net.host_set_type(i, "bot")
+	await get_tree().create_timer(0.4).timeout
+	await Net.shot("04_lobby")
+	Net.start_game()
 
 
 # ------------------------------------------------------------------ 3D background
@@ -172,6 +178,7 @@ func _screen_left(id: String) -> VBoxContainer:
 	m.add_theme_constant_override("margin_bottom", 36)
 	var v: VBoxContainer = VBoxContainer.new()
 	v.add_theme_constant_override("separation", 10)
+	v.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	m.add_child(v)
 	m.visible = false
 	screens[id] = m
@@ -321,7 +328,7 @@ func _card(cname: String, selected: bool) -> Control:
 	var b: Button = Button.new()
 	b.toggle_mode = true
 	b.button_group = card_group
-	b.custom_minimum_size = Vector2(236, 470)
+	b.custom_minimum_size = Vector2(236, 440)
 	wrap.add_child(b)
 
 	var m: MarginContainer = MarginContainer.new()

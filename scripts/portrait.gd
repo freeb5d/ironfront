@@ -44,5 +44,5 @@ func setup(entries: Array, px: Vector2i, spin: float = 0.7) -> void:
 	var cam: Camera3D = Camera3D.new()
 	cam.fov = 32.0
 	vp.add_child(cam)
-	var dist: float = 9.0 + 2.8 * maxf(0.0, n - 1.0)
+	var dist: float = 7.2 if n == 1 else 9.0 + 2.8 * maxf(0.0, n - 1.0)
 	cam.look_at_from_position(Vector3(0.0, 3.2, dist), Vector3(0.0, 1.5, 0.0))
