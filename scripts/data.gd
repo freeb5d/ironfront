@@ -38,6 +38,18 @@ const COUNTRIES := {
 }
 
 
+# Models per nation: HQ building, then [model, fit_by_height, target_size] for the light and heavy unit.
+const _U := "res://assets/units/"
+const _B := "res://assets/buildings/kenney_city_industrial/"
+const VISUALS := {
+	"USA": {"hq": _B + "building-a.glb", "units": [[_U + "soldier_b.glb", true, 2.4], [_U + "tank_a.glb", false, 5.0]]},
+	"China": {"hq": _B + "building-c.glb", "units": [[_U + "soldier_a.glb", true, 2.4], [_U + "tank_b.glb", false, 5.0]]},
+	"Russia": {"hq": _B + "building-e.glb", "units": [[_U + "soldier_a.glb", true, 2.4], [_U + "tank_c.glb", false, 5.4]]},
+	"Israel": {"hq": _B + "building-g.glb", "units": [[_U + "soldier_b.glb", true, 2.4], [_U + "tank_d.glb", false, 5.0]]},
+	"Iran": {"hq": _B + "building-i.glb", "units": [[_U + "soldier_a.glb", true, 2.4], [_U + "vehicle_x.glb", false, 5.6]]},
+}
+
+
 static func country_names() -> Array:
 	return COUNTRIES.keys()
 

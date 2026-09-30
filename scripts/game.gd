@@ -120,6 +120,9 @@ func _build_world() -> void:
 	ground.material_override = gm
 	add_child(ground)
 
+	_scatter_props()
+	_decorate_bases()
+
 	cam_pivot = Node3D.new()
 	add_child(cam_pivot)
 	cam = Camera3D.new()
@@ -291,6 +294,23 @@ func _process(dt: float) -> void:
 	var k: float = minf(1.0, dt * 14.0)
 	for id in views:
 		var node: Node3D = views[id]
+		var d3: Vector3 = targets[id] - node.position
+		d3.y = 0.0
+		if d3.length() > 0.12 and info[id][0] != 0:
+			var pv: Node3D = node.get_node("pivot")
+			pv.rotation.y = lerp_angle(pv.rotation.y, atan2(d3.x, d3.z), minf(1.0, dt * 10.0))
+			if node.has_meta("mv"):
+				node.set_meta("mv", 0.3)
+		elif node.has_meta("mv"):
+			node.set_meta("mv", maxf(0.0, float(node.get_meta("mv")) - dt))
+		if node.has_meta("ap"):
+			var ap: AnimationPlayer = node.get_meta("ap")
+			var want: String = String(node.get_meta("run")) if float(node.get_meta("mv")) > 0.0 else String(node.get_meta("idle"))
+			if want == "":
+				if ap.is_playing():
+					ap.pause()
+			elif ap.current_animation != want or not ap.is_playing():
+				ap.play(want)
 		node.position = node.position.lerp(targets[id], k)
 		node.get_node("sel").visible = selected.has(id)
 
@@ -374,34 +394,67 @@ func on_snapshot(snap: PackedFloat32Array, shots: PackedFloat32Array, money_p: P
 
 func _make_view(id: int, kind: int, owner: int) -> void:
 	var root: Node3D = Node3D.new()
-	var body: MeshInstance3D = MeshInstance3D.new()
-	var mat: StandardMaterial3D = StandardMaterial3D.new()
-	mat.albedo_color = Data.PLAYER_COLORS[owner]
-	body.material_override = mat
-	var bar_w: float = 2.0
-	var bar_y: float = 3.2
-	var ring_r: float = 1.8
+	add_child(root)
+	var pivot: Node3D = Node3D.new()
+	pivot.name = "pivot"
+	root.add_child(pivot)
+
+	var country: String = Net.slots[owner]["country"]
+	var col: Color = Data.PLAYER_COLORS[owner]
+	var bar_w: float = 2.2
+	var bar_y: float = 3.6
+	var ring_r: float = 1.9
+	var disc_r: float = 1.3
+	var model_path: String = ""
+	var by_h: bool = true
+	var size: float = 2.4
 	if kind == 0:
-		var bm: BoxMesh = BoxMesh.new()
-		bm.size = Vector3(10, 5, 10)
-		body.mesh = bm
-		body.position.y = 2.5
-		bar_w = 8.0
-		bar_y = 7.0
-		ring_r = 8.0
-	elif kind == 1:
+		model_path = Data.VISUALS[country]["hq"]
+		by_h = false
+		size = 13.0
+		bar_w = 9.0
+		bar_y = 9.0
+		ring_r = 8.5
+		disc_r = 8.5
+	else:
+		var v: Array = Data.VISUALS[country]["units"][kind - 1]
+		model_path = v[0]
+		by_h = v[1]
+		size = v[2]
+		if not by_h:
+			bar_w = 3.4
+			bar_y = 3.8
+			ring_r = 3.4
+			disc_r = 2.8
+
+	# team-coloured ground disc so ownership is readable whatever the model colours are
+	var disc: MeshInstance3D = MeshInstance3D.new()
+	var dm: CylinderMesh = CylinderMesh.new()
+	dm.top_radius = disc_r
+	dm.bottom_radius = disc_r
+	dm.height = 0.14
+	disc.mesh = dm
+	var dmat: StandardMaterial3D = StandardMaterial3D.new()
+	dmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	dmat.albedo_color = col
+	disc.material_override = dmat
+	disc.position.y = 0.07
+	pivot.add_child(disc)
+
+	var res = load(model_path)
+	if res != null:
+		var inst: Node3D = res.instantiate()
+		pivot.add_child(inst)
+		_fit(inst, size, by_h)
+		_setup_anim(root, inst)
+	else:
+		var fb: MeshInstance3D = MeshInstance3D.new()
 		var cm: CapsuleMesh = CapsuleMesh.new()
 		cm.radius = 0.6
 		cm.height = 2.0
-		body.mesh = cm
-		body.position.y = 1.0
-	else:
-		var tm: BoxMesh = BoxMesh.new()
-		tm.size = Vector3(2.6, 1.4, 3.6)
-		body.mesh = tm
-		body.position.y = 0.7
-	body.name = "body"
-	root.add_child(body)
+		fb.mesh = cm
+		fb.position.y = 1.0
+		pivot.add_child(fb)
 
 	var bar: MeshInstance3D = MeshInstance3D.new()
 	var barm: BoxMesh = BoxMesh.new()
@@ -427,13 +480,137 @@ func _make_view(id: int, kind: int, owner: int) -> void:
 	rmat.albedo_color = Color(0.2, 1, 0.2, 0.5)
 	rmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	ring.material_override = rmat
-	ring.position.y = 0.08
+	ring.position.y = 0.2
 	ring.visible = false
 	ring.name = "sel"
 	root.add_child(ring)
 
-	add_child(root)
 	views[id] = root
+
+
+# ---- model helpers ----
+
+func _bounds(inst: Node3D) -> AABB:
+	var parent: Node3D = inst.get_parent() as Node3D
+	var inv: Transform3D = parent.global_transform.affine_inverse()
+	var have: bool = false
+	var box: AABB = AABB()
+	var skels: Array = inst.find_children("*", "Skeleton3D", true, false)
+	if not skels.is_empty():
+		# skinned models: bone positions give a reliable body extent
+		for sk in skels:
+			for b in sk.get_bone_count():
+				var p: Vector3 = inv * (sk.global_transform * sk.get_bone_global_rest(b).origin)
+				if not have:
+					box = AABB(p, Vector3.ZERO)
+					have = true
+				else:
+					box = box.expand(p)
+		box = box.grow(maxf(box.size.x, maxf(box.size.y, box.size.z)) * 0.06)
+		return box
+	for mi in inst.find_children("*", "MeshInstance3D", true, false):
+		var b2: AABB = (inv * mi.global_transform) * mi.get_aabb()
+		if not have:
+			box = b2
+			have = true
+		else:
+			box = box.merge(b2)
+	return box
+
+
+func _fit(inst: Node3D, target: float, by_height: bool) -> void:
+	var box: AABB = _bounds(inst)
+	var dim: float = box.size.y if by_height else maxf(box.size.x, box.size.z)
+	if OS.get_cmdline_user_args().has("--autotest"):
+		print("FIT %s raw=%s dim=%.3f" % [inst.name, box.size, dim])
+	if dim < 0.0001:
+		return
+	var k: float = target / dim
+	inst.scale = Vector3.ONE * k
+	inst.position = Vector3(-(box.position.x + box.size.x * 0.5) * k, -box.position.y * k, -(box.position.z + box.size.z * 0.5) * k)
+
+
+func _setup_anim(root: Node3D, inst: Node3D) -> void:
+	var aps: Array = inst.find_children("*", "AnimationPlayer", true, false)
+	if aps.is_empty():
+		return
+	var ap: AnimationPlayer = aps[0]
+	var idle: String = ""
+	var run: String = ""
+	for n in ap.get_animation_list():
+		var low: String = String(n).to_lower()
+		if idle == "" and low.ends_with("idle"):
+			idle = String(n)
+		if run == "" and (low.ends_with("|run") or low.ends_with("tank_forward")):
+			run = String(n)
+	for nm in [idle, run]:
+		if nm != "":
+			ap.get_animation(nm).loop_mode = Animation.LOOP_LINEAR
+	root.set_meta("ap", ap)
+	root.set_meta("idle", idle)
+	root.set_meta("run", run)
+	root.set_meta("mv", 0.0)
+	if idle != "":
+		ap.play(idle)
+
+
+func _place_model(path: String, pos: Vector3, size: float, by_h: bool, yaw: float) -> void:
+	var res = load(path)
+	if res == null:
+		return
+	var holder: Node3D = Node3D.new()
+	holder.position = pos
+	holder.rotation.y = yaw
+	add_child(holder)
+	var inst: Node3D = res.instantiate()
+	holder.add_child(inst)
+	_fit(inst, size, by_h)
+
+
+func _scatter_props() -> void:
+	var r: RandomNumberGenerator = RandomNumberGenerator.new()
+	r.seed = Net.seed_value + 7
+	var trees: Array = ["res://assets/props/tree.glb", "res://assets/props/tree-high.glb"]
+	var rocks: Array = ["res://assets/props/rocks-high.glb", "res://assets/props/rocks-low.glb", "res://assets/props/stones.glb"]
+	var placed: int = 0
+	var attempts: int = 0
+	while placed < 100 and attempts < 800:
+		attempts += 1
+		var a: float = r.randf() * TAU
+		var rad: float = r.randf_range(30.0, 150.0)
+		if rad < 105.0 and r.randf() < 0.85:
+			continue # keep the battle lanes mostly clear
+		var p: Vector3 = Vector3(cos(a) * rad, 0.0, sin(a) * rad)
+		var blocked: bool = false
+		for i in Data.MAX_SLOTS:
+			if p.distance_to(Data.slot_pos(i)) < 34.0:
+				blocked = true
+		if blocked:
+			continue
+		if r.randf() < 0.65:
+			_place_model(trees[r.randi() % trees.size()], p, r.randf_range(5.0, 9.0), true, r.randf() * TAU)
+		else:
+			_place_model(rocks[r.randi() % rocks.size()], p, r.randf_range(3.0, 7.0), false, r.randf() * TAU)
+		placed += 1
+
+
+func _decorate_bases() -> void:
+	var kit: String = "res://assets/buildings/kenney_city_industrial/"
+	for i in Net.slots.size():
+		var t: String = Net.slots[i]["type"]
+		if t != "human" and t != "bot":
+			continue
+		var base: Vector3 = Data.slot_pos(i)
+		var out: Vector3 = base.normalized()
+		var side: Vector3 = out.rotated(Vector3.UP, PI / 2.0)
+		var yaw: float = atan2(out.x, out.z)
+		_place_model(kit + "shipping-container-a.glb", base + out * 15.0 + side * -9.0, 4.5, false, yaw)
+		_place_model(kit + "shipping-container-b.glb", base + out * 15.0 + side * -3.0, 4.5, false, yaw)
+		_place_model(kit + "shipping-container-c.glb", base + out * 15.0 + side * 3.0, 4.5, false, yaw)
+		_place_model(kit + "water-tower.glb", base + out * 17.0 + side * 10.0, 10.0, true, 0.0)
+		_place_model(kit + "detail-tank.glb", base + out * 10.0 + side * 13.0, 4.0, false, 0.0)
+		_place_model("res://assets/props/tent.glb", base + side * -15.0, 5.0, false, yaw)
+		_place_model("res://assets/props/flag.glb", base + out * -9.0 + side * 8.0, 6.0, true, 0.0)
 
 
 func _update_hp(id: int, _kind: int, frac: float) -> void:
