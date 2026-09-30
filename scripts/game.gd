@@ -71,6 +71,21 @@ func _autotest_finish() -> void:
 	_train(1)
 	_right_click(Vector2(640, 360))
 	_finish_drag(Vector2(100, 100))
+	# force the combat visuals that a real fight would trigger
+	var any_id: int = views.keys()[0] if not views.is_empty() else -1
+	_spawn_shot(any_id, Vector3(0, 0, 0), Vector3(12, 0, 3), 1)
+	_spawn_shot(any_id, Vector3(0, 0, 0), Vector3(20, 0, -4), 2)
+	_update_projectiles(0.05)
+	_update_projectiles(1.0)
+	_burst(Vector3(5, 1, 5), 20, 0.5, 0.3, Color(1, 0.5, 0.1), 8.0, Vector3(0, -9, 0))
+	# simulate a click-drag pan
+	drag_start = Vector2(400, 300)
+	pan_anchor = _ground_point(drag_start)
+	moved = true
+	box_mode = false
+	dragging = true
+	await get_tree().create_timer(0.3).timeout
+	dragging = false
 	pause_layer.visible = true
 	await get_tree().create_timer(2.0).timeout
 	print("AUTOTEST OK views=%d" % views.size())
