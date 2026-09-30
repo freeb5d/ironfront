@@ -19,12 +19,14 @@ var selected: Dictionary = {} # id -> true
 var money: PackedFloat32Array = PackedFloat32Array()
 var alive_arr: Array = []
 var status_text: String = ""
-var shot_lines: Array = []    # [from, to, ttl]
+var projectiles: Array = []   # in-flight bullets / shells
+var moved: bool = false
+var box_mode: bool = false
+var pan_anchor = null
 
 var cam_pivot: Node3D
 var cam: Camera3D
 var zoom: float = 60.0
-var shot_mesh: ImmediateMesh
 
 var money_label: Label
 var sel_label: Label
@@ -130,20 +132,6 @@ func _build_world() -> void:
 	cam_pivot.add_child(cam)
 	cam.make_current()
 
-	shot_mesh = ImmediateMesh.new()
-	var sm: MeshInstance3D = MeshInstance3D.new()
-	sm.mesh = shot_mesh
-	var smat: StandardMaterial3D = StandardMaterial3D.new()
-	smat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	smat.albedo_color = Color(1, 0.9, 0.2)
-	sm.material_override = smat
-	add_child(sm)
-
-
-func _panel(root: Control) -> PanelContainer:
-	var p: PanelContainer = PanelContainer.new()
-	root.add_child(p)
-	return p
 
 
 func _build_hud() -> void:
@@ -216,7 +204,7 @@ func _build_hud() -> void:
 			b.pressed.connect(_train.bind(idx))
 			bv.add_child(b)
 			train_buttons.append(b)
-	var help: Label = UI.label("LMB select   RMB move / attack\nWASD pan   Wheel zoom   F11 fullscreen\nEsc menu", 13, Color("8b98a9"))
+	var help: Label = UI.label("Click select   Drag = move map   Shift+drag box select   F army\nRMB move / attack   WASD pan   Wheel zoom   F11 fullscreen   Esc menu", 13, Color("8b98a9"))
 	bv.add_child(help)
 
 	# centre status (victory / defeat)
@@ -296,16 +284,35 @@ func _process(dt: float) -> void:
 		var node: Node3D = views[id]
 		var d3: Vector3 = targets[id] - node.position
 		d3.y = 0.0
-		if d3.length() > 0.12 and info[id][0] != 0:
-			var pv: Node3D = node.get_node("pivot")
-			pv.rotation.y = lerp_angle(pv.rotation.y, atan2(d3.x, d3.z), minf(1.0, dt * 10.0))
-			if node.has_meta("mv"):
+		var speed: float = d3.length() * 14.0
+		var kind_id: int = info[id][0]
+		var has_anim: bool = node.has_meta("ap")
+		var pv: Node3D = node.get_node("pivot")
+		var turn_rate: float = 2.2 if kind_id == 2 else 9.0
+		var moving_now: bool = d3.length() > 0.12 and kind_id != 0
+		if moving_now:
+			pv.rotation.y = _turn(pv.rotation.y, atan2(d3.x, d3.z), dt * turn_rate)
+			if has_anim:
 				node.set_meta("mv", 0.3)
-		elif node.has_meta("mv"):
+		elif has_anim:
 			node.set_meta("mv", maxf(0.0, float(node.get_meta("mv")) - dt))
-		if node.has_meta("ap"):
+		if node.has_meta("aim_t"):
+			var at: float = float(node.get_meta("aim_t")) - dt
+			node.set_meta("aim_t", at)
+			if at > 0.0 and not moving_now:
+				pv.rotation.y = _turn(pv.rotation.y, float(node.get_meta("aim")), dt * turn_rate)
+		if has_anim:
 			var ap: AnimationPlayer = node.get_meta("ap")
-			var want: String = String(node.get_meta("run")) if float(node.get_meta("mv")) > 0.0 else String(node.get_meta("idle"))
+			var shoot_t: float = maxf(0.0, float(node.get_meta("shoot_t", 0.0)) - dt)
+			node.set_meta("shoot_t", shoot_t)
+			var want: String = String(node.get_meta("idle"))
+			var spd_scale: float = 1.0
+			if float(node.get_meta("mv")) > 0.0:
+				want = String(node.get_meta("run"))
+				spd_scale = clampf(speed / (5.0 if kind_id == 2 else 6.0), 0.5, 1.8)
+			elif shoot_t > 0.0 and String(node.get_meta("shoot")) != "":
+				want = String(node.get_meta("shoot"))
+			ap.speed_scale = spd_scale
 			if want == "":
 				if ap.is_playing():
 					ap.pause()
@@ -314,7 +321,7 @@ func _process(dt: float) -> void:
 		node.position = node.position.lerp(targets[id], k)
 		node.get_node("sel").visible = selected.has(id)
 
-	_draw_shots(dt)
+	_update_projectiles(dt)
 
 	if my_slot >= 0 and my_slot < money.size():
 		money_label.text = "$ %d" % int(money[my_slot])
@@ -336,9 +343,19 @@ func _process(dt: float) -> void:
 
 	if dragging:
 		var m: Vector2 = get_viewport().get_mouse_position()
-		drag_rect.visible = true
-		drag_rect.position = Vector2(minf(drag_start.x, m.x), minf(drag_start.y, m.y))
-		drag_rect.size = (m - drag_start).abs()
+		if not moved and m.distance_to(drag_start) > 6.0:
+			moved = true
+		if moved and not box_mode and pan_anchor != null:
+			var g = _ground_point(m)
+			if g != null:
+				cam_pivot.position += Vector3(pan_anchor.x - g.x, 0.0, pan_anchor.z - g.z)
+				cam_pivot.position.x = clampf(cam_pivot.position.x, -140.0, 140.0)
+				cam_pivot.position.z = clampf(cam_pivot.position.z, -140.0, 140.0)
+		drag_rect.visible = moved and box_mode
+		if drag_rect.visible:
+			drag_rect.position = Vector2(minf(drag_start.x, m.x), minf(drag_start.y, m.y))
+			drag_rect.size = (m - drag_start).abs()
+		Input.set_default_cursor_shape(Input.CURSOR_DRAG if (moved and not box_mode) else Input.CURSOR_ARROW)
 	else:
 		drag_rect.visible = false
 
@@ -381,15 +398,23 @@ func on_snapshot(snap: PackedFloat32Array, shots: PackedFloat32Array, money_p: P
 		_update_hp(id, kind, frac)
 	for id in views.keys():
 		if not seen.has(id):
+			var kd: int = info[id][0]
+			var bpos: Vector3 = views[id].position + Vector3(0, 1.5, 0)
+			if kd == 0:
+				_burst(bpos, 60, 1.0, 0.6, Color(1.0, 0.45, 0.1), 14.0, Vector3(0, -8, 0))
+			elif kd == 2:
+				_burst(bpos, 24, 0.7, 0.4, Color(1.0, 0.45, 0.1), 9.0, Vector3(0, -10, 0))
+			else:
+				_burst(bpos, 8, 0.4, 0.15, Color(0.85, 0.2, 0.1), 4.0, Vector3(0, -10, 0))
 			views[id].queue_free()
 			views.erase(id)
 			targets.erase(id)
 			info.erase(id)
 			selected.erase(id)
-	var m: int = floori(shots.size() / 4.0)
+	var m: int = floori(shots.size() / 6.0)
 	for k in m:
-		var o: int = k * 4
-		shot_lines.append([Vector3(shots[o], 1.0, shots[o + 1]), Vector3(shots[o + 2], 1.0, shots[o + 3]), 0.2])
+		var o: int = k * 6
+		_spawn_shot(int(shots[o]), Vector3(shots[o + 1], 0.0, shots[o + 2]), Vector3(shots[o + 3], 0.0, shots[o + 4]), int(shots[o + 5]))
 
 
 func _make_view(id: int, kind: int, owner: int) -> void:
@@ -537,18 +562,23 @@ func _setup_anim(root: Node3D, inst: Node3D) -> void:
 	var ap: AnimationPlayer = aps[0]
 	var idle: String = ""
 	var run: String = ""
+	var shoot: String = ""
 	for n in ap.get_animation_list():
 		var low: String = String(n).to_lower()
 		if idle == "" and low.ends_with("idle"):
 			idle = String(n)
 		if run == "" and (low.ends_with("|run") or low.ends_with("tank_forward")):
 			run = String(n)
-	for nm in [idle, run]:
+		if shoot == "" and (low.ends_with("idle_gun_shoot") or low.ends_with("idle_shoot")):
+			shoot = String(n)
+	for nm in [idle, run, shoot]:
 		if nm != "":
 			ap.get_animation(nm).loop_mode = Animation.LOOP_LINEAR
 	root.set_meta("ap", ap)
 	root.set_meta("idle", idle)
 	root.set_meta("run", run)
+	root.set_meta("shoot", shoot)
+	root.set_meta("shoot_t", 0.0)
 	root.set_meta("mv", 0.0)
 	if idle != "":
 		ap.play(idle)
@@ -619,18 +649,82 @@ func _update_hp(id: int, _kind: int, frac: float) -> void:
 	bar.scale.x = maxf(frac, 0.01)
 
 
-func _draw_shots(dt: float) -> void:
-	shot_mesh.clear_surfaces()
-	for s in shot_lines:
-		s[2] -= dt
-	shot_lines = shot_lines.filter(func(s): return s[2] > 0.0)
-	if shot_lines.is_empty():
+func _turn(cur: float, tgt: float, step: float) -> float:
+	return cur + clampf(wrapf(tgt - cur, -PI, PI), -step, step)
+
+
+func _fx_material(col: Color) -> StandardMaterial3D:
+	var m: StandardMaterial3D = StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.albedo_color = col
+	return m
+
+
+func _spawn_shot(shooter: int, from: Vector3, to: Vector3, kind: int) -> void:
+	var dv: Vector3 = to - from
+	dv.y = 0.0
+	if views.has(shooter):
+		var v: Node3D = views[shooter]
+		v.set_meta("aim", atan2(dv.x, dv.z))
+		v.set_meta("aim_t", 0.7)
+		v.set_meta("shoot_t", 0.5)
+	if projectiles.size() >= 60 or dv.length() < 0.5:
 		return
-	shot_mesh.surface_begin(Mesh.PRIMITIVE_LINES)
-	for s in shot_lines:
-		shot_mesh.surface_add_vertex(s[0])
-		shot_mesh.surface_add_vertex(s[1])
-	shot_mesh.surface_end()
+	var heavy: bool = kind == 2
+	var a: Vector3 = Vector3(from.x, 2.3 if heavy else 1.5, from.z)
+	var b: Vector3 = Vector3(to.x, 1.4, to.z)
+	var node: MeshInstance3D = MeshInstance3D.new()
+	var bm: BoxMesh = BoxMesh.new()
+	bm.size = Vector3(0.25, 0.25, 1.8) if heavy else Vector3(0.08, 0.08, 1.2)
+	node.mesh = bm
+	node.material_override = _fx_material(Color(1.0, 0.65, 0.15) if heavy else Color(1.0, 0.95, 0.5))
+	add_child(node)
+	node.position = a
+	node.look_at(b)
+	projectiles.append({"n": node, "a": a, "b": b, "t": 0.0, "d": maxf(0.04, a.distance_to(b) / (40.0 if heavy else 85.0)), "heavy": heavy})
+	_burst(a, 6 if heavy else 3, 0.12, 0.25 if heavy else 0.12, Color(1.0, 0.85, 0.3), 3.0, Vector3.ZERO)
+
+
+func _burst(pos: Vector3, amount: int, life: float, size: float, col: Color, vel: float, grav: Vector3) -> void:
+	if get_tree().get_nodes_in_group("fx").size() > 50:
+		return
+	var ps: CPUParticles3D = CPUParticles3D.new()
+	ps.add_to_group("fx")
+	ps.one_shot = true
+	ps.amount = amount
+	ps.lifetime = life
+	ps.explosiveness = 1.0
+	ps.spread = 180.0
+	ps.direction = Vector3.UP
+	ps.initial_velocity_min = vel * 0.4
+	ps.initial_velocity_max = vel
+	ps.gravity = grav
+	var sm: SphereMesh = SphereMesh.new()
+	sm.radius = size
+	sm.height = size * 2.0
+	sm.radial_segments = 6
+	sm.rings = 3
+	sm.material = _fx_material(col)
+	ps.mesh = sm
+	ps.position = pos
+	add_child(ps)
+	ps.emitting = true
+	ps.finished.connect(ps.queue_free)
+
+
+func _update_projectiles(dt: float) -> void:
+	var i: int = projectiles.size() - 1
+	while i >= 0:
+		var p: Dictionary = projectiles[i]
+		p["t"] += dt
+		var f: float = minf(p["t"] / p["d"], 1.0)
+		p["n"].position = p["a"].lerp(p["b"], f)
+		if f >= 1.0:
+			var heavy: bool = p["heavy"]
+			_burst(p["b"], 14 if heavy else 6, 0.4, 0.22 if heavy else 0.1, Color(1.0, 0.5, 0.12), 6.0 if heavy else 3.5, Vector3(0, -12, 0))
+			p["n"].queue_free()
+			projectiles.remove_at(i)
+		i -= 1
 
 
 # ------------------------------------------------------------------ camera
@@ -673,10 +767,17 @@ func _unhandled_input(ev: InputEvent) -> void:
 		if ev.button_index == MOUSE_BUTTON_LEFT:
 			if ev.pressed:
 				dragging = true
+				moved = false
+				box_mode = ev.shift_pressed
 				drag_start = ev.position
+				pan_anchor = _ground_point(ev.position)
 			elif dragging:
 				dragging = false
-				_finish_drag(ev.position)
+				Input.set_default_cursor_shape(Input.CURSOR_ARROW)
+				if not moved and drag_start.distance_to(ev.position) > 6.0:
+					moved = true
+				if not moved or box_mode:
+					_finish_drag(ev.position)
 		elif ev.button_index == MOUSE_BUTTON_RIGHT and ev.pressed:
 			_right_click(ev.position)
 		elif ev.button_index == MOUSE_BUTTON_WHEEL_UP and ev.pressed:
@@ -690,6 +791,11 @@ func _unhandled_input(ev: InputEvent) -> void:
 			_train(0)
 		elif ev.keycode == KEY_E:
 			_train(1)
+		elif ev.keycode == KEY_F:
+			selected.clear()
+			for id in info:
+				if info[id][1] == my_slot and info[id][0] != 0:
+					selected[id] = true
 		elif ev.keycode == KEY_ESCAPE:
 			pause_layer.visible = not pause_layer.visible
 

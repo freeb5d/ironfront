@@ -64,7 +64,10 @@ Destroy every enemy **headquarters**. A player whose HQ falls is eliminated and 
 
 | Input | Action |
 |---|---|
-| Left click / drag | Select units / box-select |
+| Left click | Select a unit |
+| Left drag on empty ground | Move (pan) the map |
+| **Shift** + left drag | Box-select units |
+| **F** | Select your whole army |
 | Right click ground | Move selected units |
 | Right click enemy | Attack that target |
 | **Q** / **E** | Train light / heavy unit |

@@ -97,7 +97,7 @@ func spawn_unit(slot: int, idx: int) -> Ent:
 	e.rng = float(st["rng"])
 	e.spd = float(st["spd"])
 	e.cd = float(st["cd"])
-	e.radius = 1.0
+	e.radius = 1.0 if idx == 0 else 2.0
 	ents[e.id] = e
 	return e
 
@@ -163,6 +163,7 @@ func step(dt: float) -> void:
 	for e in ents.values():
 		if e.kind != 0:
 			_tick_unit(e, dt)
+	_separate()
 	_reap()
 	_check_victory()
 
@@ -213,11 +214,13 @@ func _tick_unit(e: Ent, dt: float) -> void:
 			if e.cd_left <= 0.0:
 				e.cd_left = e.cd
 				t.hp -= e.dmg
-				if shots.size() < MAX_SHOTS * 4:
+				if shots.size() < MAX_SHOTS * 6:
+					shots.append(e.id)
 					shots.append(e.pos.x)
 					shots.append(e.pos.z)
 					shots.append(t.pos.x)
 					shots.append(t.pos.z)
+					shots.append(e.kind)
 		else:
 			_move(e, t.pos, dt)
 	elif e.has_goal:
@@ -225,6 +228,52 @@ func _tick_unit(e: Ent, dt: float) -> void:
 		if _flat(e.pos, e.goal) < 1.5:
 			e.has_goal = false
 			e.atk_move = false
+
+
+func _separate() -> void:
+	# soft collision: units push each other apart and slide around HQs instead of overlapping them
+	var grid: Dictionary = {}
+	var hqs: Array = []
+	for e in ents.values():
+		if e.kind == 0:
+			hqs.append(e)
+			continue
+		var key: Vector2i = Vector2i(floori(e.pos.x / 4.0), floori(e.pos.z / 4.0))
+		if grid.has(key):
+			grid[key].append(e)
+		else:
+			grid[key] = [e]
+	for e in ents.values():
+		if e.kind == 0:
+			continue
+		var cx: int = floori(e.pos.x / 4.0)
+		var cz: int = floori(e.pos.z / 4.0)
+		var push: Vector3 = Vector3.ZERO
+		for dx in range(-1, 2):
+			for dz in range(-1, 2):
+				var cell = grid.get(Vector2i(cx + dx, cz + dz))
+				if cell == null:
+					continue
+				for o in cell:
+					if o == e:
+						continue
+					var d: Vector3 = e.pos - o.pos
+					d.y = 0.0
+					var l: float = d.length()
+					var min_d: float = e.radius + o.radius
+					if l < min_d:
+						if l < 0.001:
+							d = Vector3(rand.randf() - 0.5, 0.0, rand.randf() - 0.5)
+							l = maxf(d.length(), 0.001)
+						push += d / l * (min_d - l) * 0.4
+		e.pos += push
+		for h in hqs:
+			var dh: Vector3 = e.pos - h.pos
+			dh.y = 0.0
+			var lh: float = dh.length()
+			var md: float = h.radius + e.radius
+			if lh < md:
+				e.pos += dh / maxf(lh, 0.001) * (md - lh)
 
 
 func _reap() -> void:
