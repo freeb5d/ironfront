@@ -29,7 +29,7 @@ static func is_combat_kind(k: int) -> bool:
 
 
 static func is_building_kind(k: int) -> bool:
-	return k == 0 or (k >= 7 and k <= 11)
+	return k == 0 or (k >= 7 and k <= 12)
 
 
 static func is_neutral_kind(k: int) -> bool:
@@ -104,6 +104,9 @@ var power_use: Array = []
 var low_power: Array = []
 var comp: Array = []      # per slot: completed building count by kind
 var blds: Array = []      # per slot: completed buildings by kind
+var super_cd: Array = []  # superweapon cooldown per slot
+var upg: Array = []       # researched upgrades per slot: [armor, weapons, logistics]
+var upg_prog: Array = []  # seconds spent on each running research, -1 when idle
 var fx: PackedFloat32Array = PackedFloat32Array() # visual events for clients: type, x, z
 var rand: RandomNumberGenerator = RandomNumberGenerator.new()
 var _next_id: int = 1
@@ -138,6 +141,9 @@ func setup(p_slots: Array, seed_value: int, opts: Dictionary = {}) -> void:
 		low_power.append(false)
 		comp.append({})
 		blds.append({})
+		super_cd.append(0.0)
+		upg.append([false, false, false])
+		upg_prog.append([-1.0, -1.0, -1.0])
 		if active:
 			active_count += 1
 			_spawn_hq(i)
@@ -237,6 +243,7 @@ func spawn_unit(slot: int, idx: int, origin: Vector3 = Vector3.INF) -> Ent:
 	e.base_dmg = e.dmg
 	e.value = float(st["cost"])
 	e.radius = 3.0 if idx == 1 else 1.6
+	_recalc(e)
 	ents[e.id] = e
 	return e
 
@@ -332,6 +339,8 @@ func cmd_build(slot: int, ids: Array, btype: int, pos: Vector3) -> bool:
 		return false
 	if btype == 10 and int(comp[slot].get(9, 0)) == 0:
 		return false # the war factory needs a barracks first
+	if btype == 12 and int(comp[slot].get(10, 0)) == 0:
+		return false # the superweapon needs a war factory
 	var builders: Array = []
 	for id in ids:
 		var e = ents.get(id)
@@ -381,11 +390,13 @@ func stats() -> Array:
 	var cp: Array = []
 	for v in cpoints:
 		cp.append(snappedf(v, 0.1))
-	return [kills, lost, earned_i, cp, power_cd, power_prod, power_use, qn, qp]
+	return [kills, lost, earned_i, cp, power_cd, power_prod, power_use, qn, qp, upg, upg_prog, super_cd]
 
 
 ## Commander powers (cost 1 commander point each): 0 targeted strike, 1 reinforcements, 2 field repair.
 func cmd_power(slot: int, idx: int, pos: Vector3) -> bool:
+	if idx == 3:
+		return _fire_super(slot, pos)
 	if not powers_on or status != "" or slot < 0 or slot >= alive.size() or not alive[slot] or idx < 0 or idx > 2:
 		return false
 	if cpoints[slot] < 1.0 or power_cd[slot][idx] > 0.0:
@@ -409,8 +420,57 @@ func cmd_power(slot: int, idx: int, pos: Vector3) -> bool:
 	return true
 
 
+func _fire_super(slot: int, pos: Vector3) -> bool:
+	if status != "" or slot < 0 or slot >= alive.size() or not alive[slot]:
+		return false
+	if int(comp[slot].get(12, 0)) == 0 or super_cd[slot] > 0.0:
+		return false
+	var p: Vector3 = Vector3(clampf(pos.x, -150.0, 150.0), 0.0, clampf(pos.z, -150.0, 150.0))
+	strikes.append({"t": Data.SUPER_DELAY, "pos": p, "slot": slot, "r": Data.SUPER_RADIUS, "dmg": Data.SUPER_DAMAGE})
+	fx.append(5.0)
+	fx.append(p.x)
+	fx.append(p.z)
+	super_cd[slot] = Data.SUPER_COOLDOWN
+	return true
+
+
+func cmd_upgrade(slot: int, idx: int) -> bool:
+	if status != "" or slot < 0 or slot >= alive.size() or not alive[slot] or idx < 0 or idx > 2:
+		return false
+	if upg[slot][idx] or upg_prog[slot][idx] >= 0.0:
+		return false
+	if idx < 2 and int(comp[slot].get(9, 0)) == 0:
+		return false
+	var cost: float = float(Data.UPGRADES[idx]["cost"])
+	if money[slot] < cost:
+		return false
+	money[slot] -= cost
+	upg_prog[slot][idx] = 0.0
+	return true
+
+
+func _update_upgrades(dt: float) -> void:
+	for i in Data.MAX_SLOTS:
+		if not alive[i]:
+			continue
+		for k in 3:
+			if upg_prog[i][k] < 0.0:
+				continue
+			upg_prog[i][k] += dt * (LOW_POWER_SPEED if low_power[i] else 1.0)
+			if upg_prog[i][k] >= float(Data.UPGRADES[k]["time"]):
+				upg_prog[i][k] = -1.0
+				upg[i][k] = true
+				for e in ents.values():
+					if e.owner == i and is_unit_kind(e.kind):
+						_recalc(e)
+				fx.append(7.0)
+				fx.append(hq_pos[i].x)
+				fx.append(hq_pos[i].z)
+
+
 func _update_powers(dt: float) -> void:
 	for i in Data.MAX_SLOTS:
+		super_cd[i] = maxf(0.0, super_cd[i] - dt)
 		for k in 3:
 			power_cd[i][k] = maxf(0.0, power_cd[i][k] - dt)
 	var si: int = strikes.size() - 1
@@ -419,12 +479,14 @@ func _update_powers(dt: float) -> void:
 		s["t"] -= dt
 		if s["t"] <= 0.0:
 			var pos: Vector3 = s["pos"]
-			fx.append(2.0)
+			var sr: float = float(s.get("r", STRIKE_RADIUS))
+			var sd: float = float(s.get("dmg", STRIKE_DAMAGE))
+			fx.append(6.0 if sr > 20.0 else 2.0)
 			fx.append(pos.x)
 			fx.append(pos.z)
 			for e in ents.values():
-				if not is_neutral_kind(e.kind) and not same_team(e.owner, s["slot"]) and e.hp > 0.0 and _flat(e.pos, pos) < STRIKE_RADIUS + e.radius * 0.5:
-					_hit(s["slot"], null, e, STRIKE_DAMAGE * (0.5 if is_building_kind(e.kind) else 1.0))
+				if not is_neutral_kind(e.kind) and not same_team(e.owner, s["slot"]) and e.hp > 0.0 and _flat(e.pos, pos) < sr + e.radius * 0.5:
+					_hit(s["slot"], null, e, sd * (0.6 if is_building_kind(e.kind) else 1.0))
 			strikes.remove_at(si)
 		si -= 1
 
@@ -461,6 +523,7 @@ func step(dt: float) -> void:
 				_bot(i, dt)
 	_recount()
 	_update_production(dt)
+	_update_upgrades(dt)
 	for e in ents.values():
 		if is_combat_kind(e.kind):
 			_tick_unit(e, dt)
@@ -570,6 +633,21 @@ func _hit(slot: int, attacker, t: Ent, dmg: float) -> void:
 			_gain_xp(attacker, t.value)
 
 
+## Effective health and damage = base stats x veterancy rank x the owner's upgrades.
+func _recalc(e: Ent) -> void:
+	var hm: float = [1.0, 1.1, 1.2, 1.3][e.rank]
+	var dm: float = [1.0, 1.15, 1.3, 1.5][e.rank]
+	if e.owner >= 0:
+		if upg[e.owner][0]:
+			hm *= 1.25
+		if upg[e.owner][1]:
+			dm *= 1.2
+	var old_max: float = e.max_hp
+	e.max_hp = e.base_hp * hm
+	e.hp += e.max_hp - old_max
+	e.dmg = e.base_dmg * dm
+
+
 func _gain_xp(e: Ent, v: float) -> void:
 	e.xp += v
 	var r: int = 0
@@ -580,11 +658,8 @@ func _gain_xp(e: Ent, v: float) -> void:
 	elif e.xp >= 150.0:
 		r = 1
 	if r > e.rank:
-		var old_max: float = e.max_hp
 		e.rank = r
-		e.max_hp = e.base_hp * [1.0, 1.1, 1.2, 1.3][r]
-		e.hp += e.max_hp - old_max
-		e.dmg = e.base_dmg * [1.0, 1.15, 1.3, 1.5][r]
+		_recalc(e)
 		fx.append(3.0)
 		fx.append(e.pos.x)
 		fx.append(e.pos.z)
@@ -743,7 +818,7 @@ func _tick_farmer(e: Ent, dt: float) -> void:
 				return
 			e.timer -= dt
 			if e.timer <= 0.0:
-				var take: float = minf(Data.FARM_LOAD, n2.hp)
+				var take: float = minf(Data.FARM_LOAD * (1.5 if upg[e.owner][2] else 1.0), n2.hp)
 				n2.hp -= take
 				e.carry = take
 				e.fstate = 3
@@ -952,6 +1027,8 @@ func _bot_build(slot: int) -> void:
 		want = 10
 	elif low_power[slot] or power_use[slot] + 3 > power_prod[slot]:
 		want = 7
+	elif _count_kind(slot, 12) < 1 and time > 300.0 and int(comp[slot].get(10, 0)) > 0 and money[slot] > 1750.0:
+		want = 12
 	elif _count_kind(slot, 11) < 2 and time > 150.0:
 		want = 11
 	elif _count_kind(slot, 9) < 2 and time > 240.0:
@@ -971,6 +1048,14 @@ func _bot(slot: int, dt: float) -> void:
 		return
 	bot_timer[slot] = rand.randf_range(2.5, 4.5) * [1.6, 1.0, 0.7][difficulty]
 	_bot_build(slot)
+	if time > 150.0 and money[slot] > 900.0:
+		for k in [2, 0, 1]:
+			if cmd_upgrade(slot, k):
+				break
+	if int(comp[slot].get(12, 0)) > 0 and super_cd[slot] <= 0.0 and rand.randf() < 0.3:
+		var stgt: Vector3 = _nearest_enemy_hq(slot)
+		if stgt != Vector3.INF:
+			cmd_power(slot, 3, stgt)
 	var farmers: int = 0
 	for e in ents.values():
 		if e.owner == slot and e.kind == 3:

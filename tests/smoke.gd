@@ -116,6 +116,37 @@ func _initialize() -> void:
 	if sim2.status != "" and left_teams.size() != 1:
 		printerr("team victory condition is wrong")
 		ok = false
+	# upgrades and superweapon
+	var sim3: Sim = Sim.new()
+	sim3.setup(slots, 99, {"money": 10000})
+	if not sim3.cmd_upgrade(0, 2) or sim3.cmd_upgrade(0, 2):
+		printerr("logistics upgrade should start once")
+		ok = false
+	for s3 in 30 * 25:
+		sim3.step(dt)
+	if not sim3.upg[0][2]:
+		printerr("upgrade never finished")
+		ok = false
+	var sw: Sim.Ent = Sim.Ent.new()
+	sw.id = sim3._new_id()
+	sw.kind = 12
+	sw.owner = 0
+	sw.pos = sim3.hq_pos[0] + Vector3(20, 0, 0)
+	sw.max_hp = 1800.0
+	sw.hp = 1800.0
+	sw.radius = 7.5
+	sim3.ents[sw.id] = sw
+	sim3.step(dt)
+	var foe: Vector3 = sim3.hq_pos[4]
+	if not sim3.cmd_power(0, 3, foe) or sim3.cmd_power(0, 3, foe):
+		printerr("superweapon should fire once then cool down")
+		ok = false
+	var hq4: float = sim3.ents[sim3.hq_ids[4]].hp
+	for s4 in int(30.0 * (Data.SUPER_DELAY + 1.0)):
+		sim3.step(dt)
+	if sim3.hq_ids[4] in sim3.ents and sim3.ents[sim3.hq_ids[4]].hp >= hq4:
+		printerr("superweapon did no damage")
+		ok = false
 	if sim.farmed <= 0.0:
 		printerr("farmers never delivered any money")
 		ok = false

@@ -54,6 +54,9 @@ var ghost_mat: StandardMaterial3D = null
 var power_row: HBoxContainer
 var build_row: HBoxContainer
 var build_tiles: Array = []
+var super_tile: Button
+var upg_tiles: Array = []
+var shake: float = 0.0
 
 var cam_pivot: Node3D
 var cam: Camera3D
@@ -119,6 +122,9 @@ func _autotest_finish() -> void:
 	var hq_at: Vector3 = Data.slot_pos(my_slot)
 	var built_ok: bool = _cast_build(7, hq_at + Vector3(20, 0, 18))
 	print("AUTOTEST BUILD placed=%s" % str(built_ok))
+	_upgrade_key(2)
+	_power_key(3)
+	_handle_fx(PackedFloat32Array([5.0, hq_at.x + 25.0, hq_at.z + 25.0, 6.0, hq_at.x + 40.0, hq_at.z + 25.0, 7.0, hq_at.x, hq_at.z]))
 	await get_tree().create_timer(0.8).timeout
 	await Net.shot("17_base")
 	# overview of the whole map
@@ -375,7 +381,7 @@ func _sb(fill: Color, border: Color, bw: int, radius: int, margin: int) -> Style
 ## A command tile: live 3D portrait on top, name and price below. Call _tile_ready() once it is in the tree.
 func _tile(text: String, cb: Callable, entries: Array = []) -> Button:
 	var b: Button = Button.new()
-	b.custom_minimum_size = Vector2(114, 98)
+	b.custom_minimum_size = Vector2(98, 98)
 	b.pressed.connect(cb)
 	var vb: VBoxContainer = VBoxContainer.new()
 	vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -390,7 +396,7 @@ func _tile(text: String, cb: Callable, entries: Array = []) -> Button:
 		b.set_meta("entries", entries)
 	var parts: PackedStringArray = text.split("\n")
 	for i in parts.size():
-		var l: Label = UI.label(parts[i], 16 if i == 0 else 14, UI.TEXT if i == 0 else Color("b9c6d6"))
+		var l: Label = UI.label(parts[i], 15 if i == 0 else 13, UI.TEXT if i == 0 else Color("b9c6d6"))
 		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		vb.add_child(l)
 		if i == 1:
@@ -401,12 +407,12 @@ func _tile(text: String, cb: Callable, entries: Array = []) -> Button:
 func _tile_ready(b: Button) -> void:
 	if b.has_meta("portrait"):
 		var p: Portrait = b.get_meta("portrait")
-		p.setup(b.get_meta("entries"), Vector2i(106, 54), 0.5)
+		p.setup(b.get_meta("entries"), Vector2i(90, 54), 0.5)
 
 
 func _empty_tile() -> PanelContainer:
 	var p: PanelContainer = PanelContainer.new()
-	p.custom_minimum_size = Vector2(114, 98)
+	p.custom_minimum_size = Vector2(98, 98)
 	p.add_theme_stylebox_override("panel", _sb(Color(0.05, 0.08, 0.12), Color(0.16, 0.22, 0.30), 2, 4, 4))
 	return p
 
@@ -532,12 +538,27 @@ func _build_hud_v2() -> void:
 			pvb.move_child(icon, 0)
 			power_row.add_child(pt)
 			power_tiles.append(pt)
-		for k in 3:
-			power_row.add_child(_empty_tile())
+		super_tile = _tile("%s\n[J]" % pnames[3], _power_key.bind(3), [])
+		var sicon: PowerIcon = PowerIcon.new()
+		sicon.kind = 4
+		var svb: Node = super_tile.get_child(0)
+		svb.add_child(sicon)
+		svb.move_child(sicon, 0)
+		power_row.add_child(super_tile)
+		for ui in 3:
+			var up: Dictionary = Data.UPGRADES[ui]
+			var ut: Button = _tile("%s\n$%d" % [up["name"], up["cost"]], _upgrade_key.bind(ui), [])
+			var uicon: PowerIcon = PowerIcon.new()
+			uicon.kind = 5 + ui
+			var uvb: Node = ut.get_child(0)
+			uvb.add_child(uicon)
+			uvb.move_child(uicon, 0)
+			power_row.add_child(ut)
+			upg_tiles.append(ut)
 
-		var bkeys: Array = ["Y", "U", "I", "O", "P"]
-		var btypes: Array = [7, 8, 9, 10, 11]
-		for bi in 5:
+		var bkeys: Array = ["Y", "U", "I", "O", "P", "T"]
+		var btypes: Array = [7, 8, 9, 10, 11, 12]
+		for bi in 6:
 			var def: Dictionary = Data.BUILD[btypes[bi]]
 			var entries: Array = []
 			if Data.BUILD_VISUAL.has(btypes[bi]):
@@ -553,7 +574,6 @@ func _build_hud_v2() -> void:
 			build_row.add_child(bt)
 			_tile_ready(bt)
 			build_tiles.append(bt)
-		build_row.add_child(_tile("Cancel\n[Esc]", _cancel_placing, []))
 
 	# nation panel on the right
 	var right: PanelContainer = PanelContainer.new()
@@ -694,11 +714,37 @@ func _update_hud(dt: float) -> void:
 			else:
 				sub.text = "$%d  [%s]" % [st2["cost"], key]
 			tb.modulate = Color(1, 1, 1, 0.5 if (locked or my_money < float(st2["cost"])) else 1.0)
-		var btypes: Array = [7, 8, 9, 10, 11]
+		var btypes: Array = [7, 8, 9, 10, 11, 12]
 		for bi in build_tiles.size():
 			var bd: Dictionary = Data.BUILD[btypes[bi]]
-			var blocked: bool = btypes[bi] == 10 and not _has_complete(9)
+			var blocked: bool = (btypes[bi] == 10 and not _has_complete(9)) or (btypes[bi] == 12 and not _has_complete(10))
 			build_tiles[bi].modulate = Color(1, 1, 1, 0.5 if (blocked or my_money < float(bd["cost"])) else 1.0)
+	if stats.size() >= 12 and my_slot >= 0 and my_slot < stats[11].size() and super_tile != null:
+		var my_m: float = float(money[my_slot]) if my_slot < money.size() else 0.0
+		var scd: float = float(stats[11][my_slot])
+		var ssub: Label = super_tile.get_meta("sub")
+		if not _has_complete(12):
+			ssub.text = "build it [T]"
+		elif scd > 0.0:
+			ssub.text = "ready in %ds" % ceili(scd)
+		else:
+			ssub.text = "[J] FIRE"
+		super_tile.modulate = Color(1, 1, 1, 1.0 if (_has_complete(12) and scd <= 0.0) else 0.5)
+		for ui in upg_tiles.size():
+			var usub: Label = upg_tiles[ui].get_meta("sub")
+			var ud: Dictionary = Data.UPGRADES[ui]
+			var done: bool = bool(stats[9][my_slot][ui])
+			var uprog: float = float(stats[10][my_slot][ui])
+			var need_b: bool = ui < 2 and not _has_complete(9)
+			if done:
+				usub.text = "DONE"
+			elif uprog >= 0.0:
+				usub.text = "%d%%" % int(100.0 * uprog / float(ud["time"]))
+			elif need_b:
+				usub.text = "needs Barracks"
+			else:
+				usub.text = "$%d" % ud["cost"]
+			upg_tiles[ui].modulate = Color(1, 1, 1, 0.5 if (done or need_b or uprog >= 0.0 or my_m < float(ud["cost"])) else 1.0)
 	info_label.text += pw_text
 
 
@@ -731,7 +777,7 @@ func _build_pause() -> void:
 	resume.pressed.connect(func(): pause_layer.visible = false)
 	v.add_child(resume)
 	v.add_child(UI.settings_box(_apply_settings))
-	var keys: Label = UI.label("Hotkeys:  Ctrl+1..9 set group,  1..9 select (twice = jump)  |  H base  |  X stop  |  Ctrl+right-click attack-move  |  double-click = all of that type  |  F army  |  G farmers", 13, Color("8b98a9"))
+	var keys: Label = UI.label("Hotkeys:  Ctrl+1..9 set group,  1..9 select (twice = jump)  |  H base  |  X stop  |  Ctrl+right-click attack-move  |  double-click = all of that type  |  F army  |  G farmers  |  B builder  |  Y U I O P T build  |  J superweapon  |  K L M research", 13, Color("8b98a9"))
 	keys.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	keys.custom_minimum_size = Vector2(300, 0)
 	v.add_child(keys)
@@ -755,6 +801,13 @@ func _process(dt: float) -> void:
 			running = true
 
 	_pan_camera(dt)
+	if shake > 0.0:
+		cam.h_offset = randf_range(-1.0, 1.0) * shake * 1.5
+		cam.v_offset = randf_range(-1.0, 1.0) * shake * 1.5
+		shake = maxf(0.0, shake - dt * 1.3)
+		if shake == 0.0:
+			cam.h_offset = 0.0
+			cam.v_offset = 0.0
 
 	var k: float = minf(1.0, dt * 14.0)
 	for id in views:
@@ -1568,6 +1621,9 @@ func _build_key(btype: int) -> void:
 	if btype == 10 and not _has_complete(9):
 		_msg("The War Factory needs a Barracks first", Color(1.0, 0.8, 0.4))
 		return
+	if btype == 12 and not _has_complete(10):
+		_msg("The Superweapon needs a War Factory first", Color(1.0, 0.8, 0.4))
+		return
 	_cancel_placing()
 	placing = btype
 	ghost = MeshInstance3D.new()
@@ -1611,6 +1667,25 @@ func _cast_build(btype: int, pos: Vector3) -> bool:
 	return true
 
 
+func _upgrade_key(idx: int) -> void:
+	if my_slot < 0:
+		return
+	if multiplayer.is_server():
+		if sim != null and not sim.cmd_upgrade(my_slot, idx):
+			_msg("Can't research that right now", Color(1.0, 0.8, 0.4))
+	else:
+		srv_upgrade.rpc_id(1, idx)
+
+
+@rpc("any_peer", "reliable")
+func srv_upgrade(idx: int) -> void:
+	if not multiplayer.is_server() or sim == null:
+		return
+	var slot: int = _slot_of(multiplayer.get_remote_sender_id())
+	if slot >= 0:
+		sim.cmd_upgrade(slot, idx)
+
+
 func _cast_assist(bid: int) -> void:
 	var ids: Array = _selected_builders()
 	if multiplayer.is_server():
@@ -1641,17 +1716,22 @@ func srv_assist(ids: Array, bid: int) -> void:
 func _power_ready(idx: int) -> bool:
 	if my_slot < 0 or stats.size() < 5 or my_slot >= stats[3].size():
 		return false
+	if idx == 3:
+		return stats.size() >= 12 and _has_complete(12) and float(stats[11][my_slot]) <= 0.0
 	return float(stats[3][my_slot]) >= 1.0 and float(stats[4][my_slot][idx]) <= 0.0
 
 
 func _power_key(idx: int) -> void:
+	if idx == 3 and not _has_complete(12):
+		_msg("Build a Superweapon first (select a builder, then T)", Color(1.0, 0.8, 0.4))
+		return
 	if not _power_ready(idx):
 		_msg("That power is not ready yet", Color(1.0, 0.8, 0.4))
 		return
-	if idx == 0:
-		targeting = 0
+	if idx == 0 or idx == 3:
+		targeting = idx
 		Input.set_default_cursor_shape(Input.CURSOR_CROSS)
-		_msg("Click the map to call in the strike  (Esc cancels)", Color(1.0, 0.85, 0.4))
+		_msg("Click the map to fire the superweapon  (Esc cancels)" if idx == 3 else "Click the map to call in the strike  (Esc cancels)", Color(1.0, 0.85, 0.4))
 	else:
 		_cast_power(idx, Vector3.ZERO)
 
@@ -1724,6 +1804,31 @@ func _handle_fx(fx_p: PackedFloat32Array) -> void:
 			_burst(pos + Vector3(0, 2, 0), 40, 1.4, 1.2, Color(0.25, 0.22, 0.2), 9.0, Vector3(0, 1, 0))
 		elif t == 3: # promotion sparkle
 			_burst(pos + Vector3(0, 3, 0), 10, 0.6, 0.2, Color(1.0, 0.9, 0.3), 5.0, Vector3(0, -2, 0))
+		elif t == 5: # superweapon incoming: big warning ring
+			var bring: MeshInstance3D = MeshInstance3D.new()
+			var bcm: CylinderMesh = CylinderMesh.new()
+			bcm.top_radius = Data.SUPER_RADIUS
+			bcm.bottom_radius = Data.SUPER_RADIUS
+			bcm.height = 0.12
+			bring.mesh = bcm
+			var bmat: StandardMaterial3D = _fx_material(Color(1.0, 0.15, 0.1, 0.3))
+			bmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			bring.material_override = bmat
+			bring.position = pos + Vector3(0, 0.3, 0)
+			add_child(bring)
+			get_tree().create_timer(Data.SUPER_DELAY).timeout.connect(bring.queue_free)
+			_msg("A superweapon has been launched!", Color(1.0, 0.4, 0.3))
+			_play_ui("alarm", -2.0)
+		elif t == 6: # superweapon impact
+			_play3d("boom", pos, 10.0)
+			_burst(pos + Vector3(0, 1, 0), 160, 1.6, 1.2, Color(1.0, 0.55, 0.15), 30.0, Vector3(0, -8, 0))
+			_burst(pos + Vector3(0, 3, 0), 80, 2.2, 2.0, Color(0.3, 0.27, 0.25), 14.0, Vector3(0, 2, 0))
+			shake = 0.9
+		elif t == 7: # research finished
+			_burst(pos + Vector3(0, 6, 0), 40, 1.0, 0.3, Color(0.5, 0.9, 1.0), 10.0, Vector3(0, -3, 0))
+			if _own_hq_pos().distance_to(pos) < 1.0:
+				_msg("Research complete", Color(0.6, 0.9, 1.0))
+				_play_ui("capture", -8.0)
 		elif t == 4: # construction finished
 			_burst(pos + Vector3(0, 4, 0), 30, 0.8, 0.35, Color(0.6, 0.9, 1.0), 9.0, Vector3(0, -6, 0))
 			_play3d("ready", pos, -2.0)
@@ -1928,6 +2033,16 @@ func _unhandled_input(ev: InputEvent) -> void:
 			_build_key(10)
 		elif ev.keycode == KEY_P:
 			_build_key(11)
+		elif ev.keycode == KEY_T:
+			_build_key(12)
+		elif ev.keycode == KEY_J:
+			_power_key(3)
+		elif ev.keycode == KEY_K:
+			_upgrade_key(0)
+		elif ev.keycode == KEY_L:
+			_upgrade_key(1)
+		elif ev.keycode == KEY_M:
+			_upgrade_key(2)
 		elif ev.keycode == KEY_ESCAPE:
 			if placing != -1:
 				_cancel_placing()

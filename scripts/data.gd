@@ -41,29 +41,41 @@ const BUILD := {
 	9: {"name": "Barracks", "cost": 300, "time": 18.0, "hp": 1100.0, "radius": 6.0, "power": -2},
 	10: {"name": "War Factory", "cost": 500, "time": 26.0, "hp": 1500.0, "radius": 7.0, "power": -3},
 	11: {"name": "Turret", "cost": 250, "time": 12.0, "hp": 600.0, "radius": 3.0, "power": -1},
+	12: {"name": "Superweapon", "cost": 1500, "time": 45.0, "hp": 1800.0, "radius": 7.5, "power": -6},
 }
+
+# Research (Armor and Weapons need a Barracks, Logistics only the HQ).
+const UPGRADES := [
+	{"name": "Armor Plating", "cost": 600, "time": 25.0},
+	{"name": "Weapon Tuning", "cost": 600, "time": 25.0},
+	{"name": "Logistics", "cost": 400, "time": 20.0},
+]
+const SUPER_COOLDOWN := 180.0
+const SUPER_DELAY := 6.0
+const SUPER_RADIUS := 30.0
+const SUPER_DAMAGE := 320.0
 
 const FARMER := {"name": "Farmer", "cost": 75, "hp": 60, "dmg": 0, "rng": 0, "spd": 6.5, "cd": 1.0}
 
 # Each country trains two units: [0] light (cheap, fast), [1] heavy (armored / long range).
 const COUNTRIES := {
-	"USA": {"powers": ["Air Strike", "Rapid Deployment", "Field Repair"], "color": Color("3b82f6"), "blurb": "Elite, expensive forces. Tough tanks and reliable all-round firepower.", "units": [
+	"USA": {"powers": ["Air Strike", "Rapid Deploy", "Field Repair", "Orbital Cannon"], "color": Color("3b82f6"), "blurb": "Elite, expensive forces. Tough tanks and reliable all-round firepower.", "units": [
 		{"name": "Ranger", "cost": 110, "hp": 110, "dmg": 13, "rng": 12, "spd": 7.0, "cd": 1.0},
 		{"name": "Abrams", "cost": 380, "hp": 380, "dmg": 34, "rng": 16, "spd": 6.0, "cd": 1.4},
 	]},
-	"China": {"powers": ["Artillery Barrage", "Conscript Horde", "Field Repair"], "color": Color("ef4444"), "blurb": "Cheap, plentiful troops. Overwhelm the enemy with numbers.", "units": [
+	"China": {"powers": ["Artillery", "Horde Call", "Field Repair", "Nuke Missile"], "color": Color("ef4444"), "blurb": "Cheap, plentiful troops. Overwhelm the enemy with numbers.", "units": [
 		{"name": "Conscript", "cost": 70, "hp": 80, "dmg": 10, "rng": 11, "spd": 7.0, "cd": 1.0},
 		{"name": "Type 99", "cost": 300, "hp": 320, "dmg": 28, "rng": 15, "spd": 6.0, "cd": 1.4},
 	]},
-	"Russia": {"powers": ["Rocket Barrage", "Reserve Call-up", "Field Repair"], "color": Color("cbd5e1"), "blurb": "Heavy armor. Slow, but the toughest tanks on the field.", "units": [
+	"Russia": {"powers": ["Rocket Barrage", "Call-up", "Field Repair", "Tactical Nuke"], "color": Color("cbd5e1"), "blurb": "Heavy armor. Slow, but the toughest tanks on the field.", "units": [
 		{"name": "Motor Rifle", "cost": 100, "hp": 105, "dmg": 12, "rng": 12, "spd": 6.5, "cd": 1.0},
 		{"name": "T-90", "cost": 340, "hp": 400, "dmg": 30, "rng": 16, "spd": 5.5, "cd": 1.4},
 	]},
-	"Israel": {"powers": ["Precision Strike", "Commando Drop", "Field Repair"], "color": Color("38bdf8"), "blurb": "Fast, precise strikes. Agile units that hit hard and first.", "units": [
+	"Israel": {"powers": ["Precision Hit", "Commando Drop", "Field Repair", "Jericho Strike"], "color": Color("38bdf8"), "blurb": "Fast, precise strikes. Agile units that hit hard and first.", "units": [
 		{"name": "Commando", "cost": 120, "hp": 90, "dmg": 15, "rng": 13, "spd": 8.0, "cd": 0.9},
 		{"name": "Merkava", "cost": 400, "hp": 420, "dmg": 33, "rng": 16, "spd": 6.0, "cd": 1.4},
 	]},
-	"Iran": {"powers": ["Missile Salvo", "Militia Uprising", "Field Repair"], "color": Color("22c55e"), "blurb": "Asymmetric warfare. Cheap militia and long-range missile trucks.", "units": [
+	"Iran": {"powers": ["Missile Salvo", "Uprising", "Field Repair", "Scud Storm"], "color": Color("22c55e"), "blurb": "Asymmetric warfare. Cheap militia and long-range missile trucks.", "units": [
 		{"name": "Militia", "cost": 60, "hp": 70, "dmg": 9, "rng": 11, "spd": 7.0, "cd": 1.0},
 		{"name": "Missile Truck", "cost": 300, "hp": 150, "dmg": 45, "rng": 26, "spd": 5.0, "cd": 2.5},
 	]},
@@ -80,6 +92,7 @@ const BUILD_VISUAL := {
 	8: [_B + "detail-tank-large.glb", false, 10.0],
 	9: [_B + "building-n.glb", false, 13.0],
 	10: [_B + "building-q.glb", false, 17.0],
+	12: [_B + "chimney-large.glb", true, 24.0],
 }
 const VISUALS := {
 	"USA": {"hq": _B + "building-a.glb", "units": [[_U + "soldier_b.glb", true, 3.6], [_U + "tank_a.glb", false, 7.0]]},
