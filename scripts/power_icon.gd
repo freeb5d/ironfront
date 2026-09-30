@@ -26,6 +26,11 @@ func _draw() -> void:
 			for off in [Vector2(-18, 8), Vector2(0, -10), Vector2(18, 8)]:
 				draw_circle(c + off, 7.0, green)
 				draw_rect(Rect2(c + off + Vector2(-6, 7), Vector2(12, 9)), green)
+		3:
+			var steel: Color = Color(0.75, 0.82, 0.9)
+			draw_circle(c + Vector2(-4, 4), 13.0, steel)
+			draw_rect(Rect2(c + Vector2(2, -2), Vector2(24, 7)), steel)
+			draw_rect(Rect2(c + Vector2(-20, 14), Vector2(32, 5)), Color(0.4, 0.46, 0.55))
 		2:
 			var cyan: Color = Color(0.45, 0.85, 1.0)
 			draw_rect(Rect2(c + Vector2(-5, -20), Vector2(10, 40)), cyan)

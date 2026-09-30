@@ -23,15 +23,30 @@ func _initialize() -> void:
 		if sc == null or not sc.can_instantiate():
 			printerr("script failed to compile: " + path)
 			ok = false
-	var expected: int = 8 * 7 + Data.MONEY_NODES.size() + Data.OIL_NODES.size()
+	var expected: int = 8 * 8 + Data.MONEY_NODES.size() + Data.OIL_NODES.size()
 	if sim.ents.size() != expected:
 		printerr("expected %d starting entities, got %d" % [expected, sim.ents.size()])
 		ok = false
 
 	# player-style commands must work
 	sim.money[0] = 1000.0
-	if not sim.cmd_train(0, 1):
+	if not sim.cmd_train(0, 0):
 		printerr("cmd_train failed")
+		ok = false
+	if sim.cmd_train(0, 1):
+		printerr("heavy units must need a war factory")
+		ok = false
+	# a builder can place a power plant
+	var b_id: int = -1
+	for e in sim.ents.values():
+		if e.owner == 0 and e.kind == 6:
+			b_id = e.id
+	var spot: Vector3 = sim.find_spot(0, 7)
+	if b_id == -1 or spot == Vector3.INF or not sim.cmd_build(0, [b_id], 7, spot):
+		printerr("cmd_build failed")
+		ok = false
+	if sim.cmd_build(0, [b_id], 10, sim.find_spot(0, 10)):
+		printerr("war factory must need a barracks")
 		ok = false
 
 	# commander powers must work and respect cost
@@ -68,6 +83,14 @@ func _initialize() -> void:
 		if e.rank > 0:
 			vets += 1
 	print("veterans alive=%d" % vets)
+	var structures: int = 0
+	for e in sim.ents.values():
+		if e.kind >= 7:
+			structures += 1
+	print("buildings finished=%d standing=%d units produced=%d" % [sim.built, structures, sim.produced])
+	if sim.built <= 0 or sim.produced <= 0:
+		printerr("bots never built a base or produced units")
+		ok = false
 	# second match: 4 teams of 2, rich start, big armies, powers disabled
 	var slots2: Array = []
 	for i in Data.MAX_SLOTS:

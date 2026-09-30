@@ -35,6 +35,9 @@ func _draw() -> void:
 				draw_rect(Rect2(p - Vector2(4, 4), Vector2(8, 8)), col)
 			elif kind == 5:
 				draw_rect(Rect2(p - Vector2(3, 3), Vector2(6, 6)), Color(0.2, 0.9, 0.3))
+			elif kind >= 7:
+				draw_rect(Rect2(p - Vector2(3, 3), Vector2(6, 6)), col)
+				draw_rect(Rect2(p - Vector2(3, 3), Vector2(6, 6)), Color(0, 0, 0, 0.6), false, 1.0)
 			elif kind == 4:
 				draw_circle(p, 5.0, col)
 				draw_circle(p, 2.5, Color(1.0, 0.85, 0.1))

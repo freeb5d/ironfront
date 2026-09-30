@@ -48,6 +48,12 @@ var final_shown: bool = false
 var elim_shown: bool = false
 var targeting: int = -1      # power waiting for a map click, -1 = none
 var power_tiles: Array = []
+var placing: int = -1         # building type being placed, -1 = none
+var ghost: MeshInstance3D = null
+var ghost_mat: StandardMaterial3D = null
+var power_row: HBoxContainer
+var build_row: HBoxContainer
+var build_tiles: Array = []
 
 var cam_pivot: Node3D
 var cam: Camera3D
@@ -102,6 +108,19 @@ func _autotest_finish() -> void:
 	await Net.shot("11_selection")
 	_right_click(Vector2(640, 360))
 	_finish_drag(Vector2(100, 100))
+	# base building: ghost, placement, construction
+	selected.clear()
+	for id in info:
+		if info[id][1] == my_slot and info[id][0] == 6:
+			selected[id] = true
+	_build_key(9)
+	await get_tree().create_timer(0.2).timeout
+	_cancel_placing()
+	var hq_at: Vector3 = Data.slot_pos(my_slot)
+	var built_ok: bool = _cast_build(7, hq_at + Vector3(20, 0, 18))
+	print("AUTOTEST BUILD placed=%s" % str(built_ok))
+	await get_tree().create_timer(0.8).timeout
+	await Net.shot("17_base")
 	# overview of the whole map
 	var keep_pivot: Vector3 = cam_pivot.position
 	zoom = 140.0
@@ -479,17 +498,22 @@ func _build_hud_v2() -> void:
 	grid.add_theme_constant_override("h_separation", 6)
 	grid.add_theme_constant_override("v_separation", 6)
 	centre.add_child(grid)
-	var used: int = 0
+	power_row = HBoxContainer.new()
+	power_row.add_theme_constant_override("separation", 6)
+	centre.add_child(power_row)
+	build_row = HBoxContainer.new()
+	build_row.add_theme_constant_override("separation", 6)
+	build_row.visible = false
+	centre.add_child(build_row)
 	if my_slot >= 0:
 		var country: String = Net.slots[my_slot]["country"]
-		for idx in 3:
+		for idx in 4:
 			var st: Dictionary = Data.unit(country, idx)
-			var vis: Array = Data.FARMER_VISUAL if idx == 2 else Data.VISUALS[country]["units"][idx]
-			var b: Button = _tile("%s\n$%d  [%s]" % [st["name"], st["cost"], ["Q", "E", "R"][idx]], _train.bind(idx), [[vis[0], vis[1], 3.2 if vis[1] else 5.0]])
+			var vis: Array = Data.unit_visual(country, idx)
+			var b: Button = _tile("%s\n$%d  [%s]" % [st["name"], st["cost"], ["Q", "E", "R", "B"][idx]], _train.bind(idx), [[vis[0], vis[1], 3.2 if vis[1] else 5.0]])
 			grid.add_child(b)
 			_tile_ready(b)
 			train_buttons.append(b)
-			used += 1
 		var army_vis: Array = Data.VISUALS[country]["units"][0]
 		var t_army: Button = _tile("Select army\n[F]", _select_kinds.bind([1, 2]), [[army_vis[0], true, 3.2]])
 		grid.add_child(t_army)
@@ -497,7 +521,7 @@ func _build_hud_v2() -> void:
 		var t_farm: Button = _tile("Select farmers\n[G]", _select_kinds.bind([3]), [[Data.FARMER_VISUAL[0], true, 3.2]])
 		grid.add_child(t_farm)
 		_tile_ready(t_farm)
-		grid.add_child(_empty_tile())
+
 		var pnames: Array = Data.COUNTRIES[country]["powers"]
 		for pi in 3:
 			var pt: Button = _tile("%s\n1 pt  [%s]" % [pnames[pi], ["Z", "C", "V"][pi]], _power_key.bind(pi), [])
@@ -506,11 +530,30 @@ func _build_hud_v2() -> void:
 			var pvb: Node = pt.get_child(0)
 			pvb.add_child(icon)
 			pvb.move_child(icon, 0)
-			grid.add_child(pt)
+			power_row.add_child(pt)
 			power_tiles.append(pt)
-		used += 6
-	for k in range(used, 12):
-		grid.add_child(_empty_tile())
+		for k in 3:
+			power_row.add_child(_empty_tile())
+
+		var bkeys: Array = ["Y", "U", "I", "O", "P"]
+		var btypes: Array = [7, 8, 9, 10, 11]
+		for bi in 5:
+			var def: Dictionary = Data.BUILD[btypes[bi]]
+			var entries: Array = []
+			if Data.BUILD_VISUAL.has(btypes[bi]):
+				var bv: Array = Data.BUILD_VISUAL[btypes[bi]]
+				entries = [[bv[0], bv[1], 4.6 if bv[1] else 5.6]]
+			var bt: Button = _tile("%s\n$%d  [%s]" % [def["name"], def["cost"], bkeys[bi]], _build_key.bind(btypes[bi]), entries)
+			if entries.is_empty():
+				var bicon: PowerIcon = PowerIcon.new()
+				bicon.kind = 3
+				var bvb: Node = bt.get_child(0)
+				bvb.add_child(bicon)
+				bvb.move_child(bicon, 0)
+			build_row.add_child(bt)
+			_tile_ready(bt)
+			build_tiles.append(bt)
+		build_row.add_child(_tile("Cancel\n[Esc]", _cancel_placing, []))
 
 	# nation panel on the right
 	var right: PanelContainer = PanelContainer.new()
@@ -564,6 +607,7 @@ func _build_hud_v2() -> void:
 
 
 func _update_hud(dt: float) -> void:
+	_update_ghost()
 	var vs: Vector2 = get_viewport().get_visible_rect().size
 	plate.position = Vector2((vs.x - plate.size.x) * 0.5, vs.y - bottom_bar.size.y - plate.size.y + 6.0)
 	fps_label.visible = Net.show_fps
@@ -591,9 +635,9 @@ func _update_hud(dt: float) -> void:
 					light += 1
 				2:
 					heavy += 1
-				3:
+				3, 6:
 					farm += 1
-	sel_label.text = "" if selected.is_empty() else "Selected: %d   (%d light, %d heavy, %d farmers)" % [selected.size(), light, heavy, farm]
+	sel_label.text = "" if selected.is_empty() else "Selected: %d   (%d light, %d heavy, %d workers)" % [selected.size(), light, heavy, farm]
 	var units: int = 0
 	var farmers: int = 0
 	var oil: int = 0
@@ -624,6 +668,38 @@ func _update_hud(dt: float) -> void:
 			units += 1
 	info_label.text = "Units  %d / %d\nFarmers  %d\n[color=#e3b341]Oil derricks  %d[/color]\n[color=#7dd3fc]Commander points  %s[/color]" % [units, int(Net.options.get("unit_cap", Data.UNIT_CAP)), farmers, oil, cp_text]
 	unit_bar.value = units
+
+	var has_builder: bool = not _selected_builders().is_empty()
+	build_row.visible = has_builder or placing != -1
+	power_row.visible = not build_row.visible
+	var pw_text: String = ""
+	if stats.size() >= 9 and my_slot >= 0 and my_slot < stats[5].size():
+		var prod: int = int(stats[5][my_slot])
+		var use: int = int(stats[6][my_slot])
+		var low: bool = use > prod
+		pw_text = "\n[color=%s]Power  %d / %d%s[/color]" % ["#ff6b5e" if low else "#9be564", use, prod, "   LOW POWER" if low else ""]
+		var my_money: float = float(money[my_slot]) if my_slot < money.size() else 0.0
+		for idx in train_buttons.size():
+			var tb: Button = train_buttons[idx]
+			var sub: Label = tb.get_meta("sub")
+			var st2: Dictionary = Data.unit(Net.slots[my_slot]["country"], idx)
+			var q: int = int(stats[7][my_slot][idx])
+			var key: String = ["Q", "E", "R", "B"][idx]
+			var locked: bool = idx == 1 and not _has_complete(10)
+			if locked:
+				sub.text = "needs Factory"
+			elif q > 0:
+				var frac: int = int(100.0 * float(stats[8][my_slot][idx]) / float(Data.TRAIN_TIME[idx]))
+				sub.text = "x%d  %d%%" % [q, frac]
+			else:
+				sub.text = "$%d  [%s]" % [st2["cost"], key]
+			tb.modulate = Color(1, 1, 1, 0.5 if (locked or my_money < float(st2["cost"])) else 1.0)
+		var btypes: Array = [7, 8, 9, 10, 11]
+		for bi in build_tiles.size():
+			var bd: Dictionary = Data.BUILD[btypes[bi]]
+			var blocked: bool = btypes[bi] == 10 and not _has_complete(9)
+			build_tiles[bi].modulate = Color(1, 1, 1, 0.5 if (blocked or my_money < float(bd["cost"])) else 1.0)
+	info_label.text += pw_text
 
 
 func _build_pause() -> void:
@@ -829,7 +905,7 @@ func on_snapshot(snap: PackedFloat32Array, shots: PackedFloat32Array, money_p: P
 				last_alert = now
 				_msg("Your base is under attack!", Color(1.0, 0.4, 0.35))
 				_play_ui("alarm", -4.0)
-		info[id] = [kind, owner, frac]
+		info[id] = [kind, owner, frac, rank]
 		if int(views[id].get_meta("owner", -99)) != owner:
 			_set_owner(id, owner)
 		_update_hp(id, kind, frac)
@@ -844,7 +920,7 @@ func on_snapshot(snap: PackedFloat32Array, shots: PackedFloat32Array, money_p: P
 			elif kd == 0:
 				_play3d("boom", bpos, 4.0)
 				_burst(bpos, 60, 1.0, 0.6, Color(1.0, 0.45, 0.1), 14.0, Vector3(0, -8, 0))
-			elif kd == 2:
+			elif kd == 2 or kd >= 7:
 				_play3d("boom", bpos, -4.0)
 				_burst(bpos, 24, 0.7, 0.4, Color(1.0, 0.45, 0.1), 9.0, Vector3(0, -10, 0))
 			else:
@@ -897,6 +973,21 @@ func _make_view(id: int, kind: int, owner: int) -> void:
 		bar_w = 5.0
 		bar_y = 5.0
 		disc_r = 0.1
+	elif kind == 6:
+		model_path = Data.BUILDER_VISUAL[0]
+		by_h = Data.BUILDER_VISUAL[1]
+		size = Data.BUILDER_VISUAL[2]
+	elif kind >= 7:
+		var br: float = float(Data.BUILD[kind]["radius"])
+		if Data.BUILD_VISUAL.has(kind):
+			var bv2: Array = Data.BUILD_VISUAL[kind]
+			model_path = bv2[0]
+			by_h = bv2[1]
+			size = bv2[2]
+		bar_w = br * 1.7
+		bar_y = 10.0
+		ring_r = br + 1.8
+		disc_r = br + 1.5
 	else:
 		var v: Array = Data.VISUALS[country]["units"][kind - 1]
 		model_path = v[0]
@@ -927,6 +1018,8 @@ func _make_view(id: int, kind: int, owner: int) -> void:
 
 	if kind == 4 or kind == 5:
 		_static_visual(pivot, kind)
+	elif kind == 11:
+		_turret_visual(pivot)
 	else:
 		var res = load(model_path)
 		if res != null:
@@ -1006,6 +1099,37 @@ func _label3d(text: String, col: Color, y: float, px: float) -> Label3D:
 	l.no_depth_test = true
 	l.position.y = y
 	return l
+
+
+func _turret_visual(pivot: Node3D) -> void:
+	var steel: StandardMaterial3D = StandardMaterial3D.new()
+	steel.albedo_color = Color(0.32, 0.36, 0.42)
+	steel.metallic = 0.5
+	steel.roughness = 0.5
+	var base: MeshInstance3D = MeshInstance3D.new()
+	var cyl: CylinderMesh = CylinderMesh.new()
+	cyl.top_radius = 2.0
+	cyl.bottom_radius = 2.5
+	cyl.height = 1.4
+	base.mesh = cyl
+	base.material_override = steel
+	base.position.y = 0.7
+	pivot.add_child(base)
+	var dome: MeshInstance3D = MeshInstance3D.new()
+	var sm: SphereMesh = SphereMesh.new()
+	sm.radius = 1.5
+	sm.height = 2.4
+	dome.mesh = sm
+	dome.material_override = steel
+	dome.position.y = 1.9
+	pivot.add_child(dome)
+	var barrel: MeshInstance3D = MeshInstance3D.new()
+	var bm: BoxMesh = BoxMesh.new()
+	bm.size = Vector3(0.6, 0.6, 4.6)
+	barrel.mesh = bm
+	barrel.material_override = steel
+	barrel.position = Vector3(0, 2.1, 2.6)
+	pivot.add_child(barrel)
 
 
 func _static_visual(pivot: Node3D, kind: int) -> void:
@@ -1213,7 +1337,7 @@ func _update_hp(id: int, _kind: int, frac: float) -> void:
 	if _kind == 4:
 		bar.visible = frac > 0.07 # capture progress
 	else:
-		bar.visible = frac < 0.999 or Net.always_bars
+		bar.visible = frac < 0.999 or Net.always_bars or (info.has(id) and int(info[id][3]) == 9)
 	bar.scale.x = maxf(frac, 0.01)
 
 
@@ -1387,6 +1511,133 @@ func _show_end(title: String, final: bool) -> void:
 	bar.add_child(leave)
 
 
+func _selected_builders() -> Array:
+	var out: Array = []
+	for id in selected:
+		if info.has(id) and info[id][0] == 6 and info[id][1] == my_slot:
+			out.append(id)
+	return out
+
+
+func _has_complete(kind: int) -> bool:
+	for id in info:
+		if info[id][0] == kind and info[id][1] == my_slot and int(info[id][3]) != 9:
+			return true
+	return false
+
+
+func _own_hq_pos() -> Vector3:
+	for id in info:
+		if info[id][0] == 0 and info[id][1] == my_slot:
+			return targets[id]
+	return Vector3.ZERO
+
+
+func _spot_ok_client(pos: Vector3, r: float) -> bool:
+	if absf(pos.x) > 140.0 or absf(pos.z) > 140.0:
+		return false
+	var hq: Vector3 = _own_hq_pos()
+	if Vector2(pos.x - hq.x, pos.z - hq.z).length() > Sim.BASE_ZONE:
+		return false
+	for id in info:
+		var k: int = info[id][0]
+		var d: float = Vector2(pos.x - targets[id].x, pos.z - targets[id].z).length()
+		if k == 4:
+			if d < r + 4.0 + 4.0:
+				return false
+		elif k == 5:
+			if d < r + 2.5 + 4.0:
+				return false
+		elif k == 0 or k >= 7:
+			var rad: float = 7.5 if k == 0 else float(Data.BUILD[k]["radius"])
+			if d < r + rad + 1.5:
+				return false
+	return true
+
+
+func _build_key(btype: int) -> void:
+	if my_slot < 0 or stats.size() < 9:
+		return
+	if _selected_builders().is_empty():
+		_msg("Select a builder first", Color(1.0, 0.8, 0.4))
+		return
+	var def: Dictionary = Data.BUILD[btype]
+	if money.size() > my_slot and float(money[my_slot]) < float(def["cost"]):
+		_msg("Not enough money for a %s" % def["name"], Color(1.0, 0.6, 0.4))
+		return
+	if btype == 10 and not _has_complete(9):
+		_msg("The War Factory needs a Barracks first", Color(1.0, 0.8, 0.4))
+		return
+	_cancel_placing()
+	placing = btype
+	ghost = MeshInstance3D.new()
+	var cm: CylinderMesh = CylinderMesh.new()
+	cm.top_radius = float(def["radius"])
+	cm.bottom_radius = float(def["radius"])
+	cm.height = 0.3
+	ghost.mesh = cm
+	ghost_mat = _fx_material(Color(0.3, 1.0, 0.4, 0.45))
+	ghost_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	ghost.material_override = ghost_mat
+	add_child(ghost)
+	_msg("Click to place the %s   (Shift = place several, Esc cancels)" % def["name"], Color(0.7, 0.9, 1.0))
+
+
+func _cancel_placing() -> void:
+	placing = -1
+	if ghost != null:
+		ghost.queue_free()
+		ghost = null
+
+
+func _update_ghost() -> void:
+	if placing == -1 or ghost == null:
+		return
+	var g = _ground_point(get_viewport().get_mouse_position())
+	if g == null:
+		return
+	ghost.position = Vector3(g.x, 0.25, g.z)
+	var ok: bool = _spot_ok_client(g, float(Data.BUILD[placing]["radius"]))
+	ghost_mat.albedo_color = Color(0.3, 1.0, 0.4, 0.45) if ok else Color(1.0, 0.25, 0.2, 0.45)
+
+
+func _cast_build(btype: int, pos: Vector3) -> bool:
+	var ids: Array = _selected_builders()
+	if ids.is_empty():
+		return false
+	if multiplayer.is_server():
+		return sim != null and sim.cmd_build(my_slot, ids, btype, pos)
+	srv_build.rpc_id(1, ids, btype, pos)
+	return true
+
+
+func _cast_assist(bid: int) -> void:
+	var ids: Array = _selected_builders()
+	if multiplayer.is_server():
+		if sim != null:
+			sim.cmd_assist(my_slot, ids, bid)
+	else:
+		srv_assist.rpc_id(1, ids, bid)
+
+
+@rpc("any_peer", "reliable")
+func srv_build(ids: Array, btype: int, pos: Vector3) -> void:
+	if not multiplayer.is_server() or sim == null or ids.size() > 50:
+		return
+	var slot: int = _slot_of(multiplayer.get_remote_sender_id())
+	if slot >= 0:
+		sim.cmd_build(slot, ids, btype, pos)
+
+
+@rpc("any_peer", "reliable")
+func srv_assist(ids: Array, bid: int) -> void:
+	if not multiplayer.is_server() or sim == null or ids.size() > 50:
+		return
+	var slot: int = _slot_of(multiplayer.get_remote_sender_id())
+	if slot >= 0:
+		sim.cmd_assist(slot, ids, bid)
+
+
 func _power_ready(idx: int) -> bool:
 	if my_slot < 0 or stats.size() < 5 or my_slot >= stats[3].size():
 		return false
@@ -1424,7 +1675,17 @@ func srv_power(idx: int, pos: Vector3) -> void:
 
 func _update_rank(id: int, rank: int) -> void:
 	var v: Node3D = views[id]
-	if int(v.get_meta("rank", 0)) == rank:
+	var prev: int = int(v.get_meta("rank", 0))
+	if rank == 9: # still under construction: the building rises with its progress
+		var prog: float = float(info[id][2]) if info.has(id) else 0.5
+		v.get_node("pivot").scale = Vector3(1.0, clampf(0.2 + 0.8 * prog, 0.2, 1.0), 1.0)
+		v.set_meta("rank", 9)
+		return
+	if prev == 9:
+		v.get_node("pivot").scale = Vector3.ONE
+		v.set_meta("rank", 0)
+		prev = 0
+	if prev == rank:
 		return
 	v.set_meta("rank", rank)
 	var old: Node = v.get_node_or_null("rank")
@@ -1463,6 +1724,9 @@ func _handle_fx(fx_p: PackedFloat32Array) -> void:
 			_burst(pos + Vector3(0, 2, 0), 40, 1.4, 1.2, Color(0.25, 0.22, 0.2), 9.0, Vector3(0, 1, 0))
 		elif t == 3: # promotion sparkle
 			_burst(pos + Vector3(0, 3, 0), 10, 0.6, 0.2, Color(1.0, 0.9, 0.3), 5.0, Vector3(0, -2, 0))
+		elif t == 4: # construction finished
+			_burst(pos + Vector3(0, 4, 0), 30, 0.8, 0.35, Color(0.6, 0.9, 1.0), 9.0, Vector3(0, -6, 0))
+			_play3d("ready", pos, -2.0)
 
 
 func _turn(cur: float, tgt: float, step: float) -> float:
@@ -1594,7 +1858,15 @@ func _unhandled_input(ev: InputEvent) -> void:
 				Input.set_default_cursor_shape(Input.CURSOR_ARROW)
 				if not moved and drag_start.distance_to(ev.position) > 6.0:
 					moved = true
-				if not moved and targeting != -1:
+				if not moved and placing != -1:
+					var pg = _ground_point(ev.position)
+					if pg != null and _spot_ok_client(pg, float(Data.BUILD[placing]["radius"])):
+						_cast_build(placing, pg)
+						if not Input.is_key_pressed(KEY_SHIFT):
+							_cancel_placing()
+					else:
+						_msg("You can't build there", Color(1.0, 0.5, 0.4))
+				elif not moved and targeting != -1:
 					var tg = _ground_point(ev.position)
 					if tg != null:
 						_cast_power(targeting, tg)
@@ -1644,8 +1916,22 @@ func _unhandled_input(ev: InputEvent) -> void:
 			_power_key(1)
 		elif ev.keycode == KEY_V:
 			_power_key(2)
+		elif ev.keycode == KEY_B:
+			_train(3)
+		elif ev.keycode == KEY_Y:
+			_build_key(7)
+		elif ev.keycode == KEY_U:
+			_build_key(8)
+		elif ev.keycode == KEY_I:
+			_build_key(9)
+		elif ev.keycode == KEY_O:
+			_build_key(10)
+		elif ev.keycode == KEY_P:
+			_build_key(11)
 		elif ev.keycode == KEY_ESCAPE:
-			if targeting != -1:
+			if placing != -1:
+				_cancel_placing()
+			elif targeting != -1:
 				targeting = -1
 				Input.set_default_cursor_shape(Input.CURSOR_ARROW)
 			else:
@@ -1659,7 +1945,7 @@ func _is_enemy(owner: int) -> bool:
 
 
 func _is_unit(k: int) -> bool:
-	return k >= 1 and k <= 3
+	return Sim.is_unit_kind(k)
 
 
 func _ground_point(sp: Vector2) -> Variant:
@@ -1716,6 +2002,9 @@ func _box_select(a: Vector2, b: Vector2) -> void:
 
 
 func _right_click(sp: Vector2) -> void:
+	if placing != -1:
+		_cancel_placing()
+		return
 	if targeting != -1:
 		targeting = -1
 		Input.set_default_cursor_shape(Input.CURSOR_ARROW)
@@ -1728,6 +2017,7 @@ func _right_click(sp: Vector2) -> void:
 	var enemy: int = -1
 	var field: int = -1
 	var oil: bool = false
+	var assist: int = -1
 	var best_d: float = 100.0
 	for id in info:
 		var k: int = info[id][0]
@@ -1739,8 +2029,15 @@ func _right_click(sp: Vector2) -> void:
 		elif k == 4:
 			if d < 7.0:
 				oil = true
+		elif k >= 7 and info[id][1] == my_slot and int(info[id][3]) == 9:
+			if d < float(Data.BUILD[k]["radius"]) + 2.0:
+				assist = id
 		elif _is_enemy(info[id][1]):
-			var reach: float = 8.0 if k == 0 else 2.5
+			var reach: float = 2.5
+			if k == 0:
+				reach = 8.0
+			elif k >= 7:
+				reach = float(Data.BUILD[k]["radius"]) + 1.5
 			if d < reach and d < best_d:
 				best_d = d
 				enemy = id
@@ -1752,6 +2049,8 @@ func _right_click(sp: Vector2) -> void:
 			sim.cmd_attack(my_slot, ids, enemy)
 		else:
 			srv_attack.rpc_id(1, ids, enemy)
+	elif assist != -1 and not _selected_builders().is_empty():
+		_cast_assist(assist)
 	elif field != -1:
 		if multiplayer.is_server():
 			sim.cmd_harvest(my_slot, ids, field)

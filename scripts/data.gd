@@ -31,6 +31,18 @@ const OIL_NODES := [
 	Vector3(0, 0, 0), Vector3(-56, 0, -22), Vector3(56, 0, 22), Vector3(-56, 0, 22), Vector3(56, 0, -22),
 ]
 
+const BUILDER := {"name": "Builder", "cost": 120, "hp": 90, "dmg": 0, "rng": 0, "spd": 6.0, "cd": 1.0}
+const TRAIN_TIME := [4.0, 9.0, 5.0, 8.0] # seconds: light, heavy, farmer, builder
+
+# Buildings (key = entity kind). power > 0 produces power, power < 0 consumes it.
+const BUILD := {
+	7: {"name": "Power Plant", "cost": 200, "time": 14.0, "hp": 700.0, "radius": 5.0, "power": 8},
+	8: {"name": "Supply Depot", "cost": 250, "time": 16.0, "hp": 900.0, "radius": 5.5, "power": -1},
+	9: {"name": "Barracks", "cost": 300, "time": 18.0, "hp": 1100.0, "radius": 6.0, "power": -2},
+	10: {"name": "War Factory", "cost": 500, "time": 26.0, "hp": 1500.0, "radius": 7.0, "power": -3},
+	11: {"name": "Turret", "cost": 250, "time": 12.0, "hp": 600.0, "radius": 3.0, "power": -1},
+}
+
 const FARMER := {"name": "Farmer", "cost": 75, "hp": 60, "dmg": 0, "rng": 0, "spd": 6.5, "cd": 1.0}
 
 # Each country trains two units: [0] light (cheap, fast), [1] heavy (armored / long range).
@@ -61,7 +73,14 @@ const COUNTRIES := {
 # Models per nation: HQ building, then [model, fit_by_height, target_size] for the light and heavy unit.
 const _U := "res://assets/units/"
 const _B := "res://assets/buildings/kenney_city_industrial/"
-const FARMER_VISUAL := [_U + "worker_a.glb", true, 3.3]
+const FARMER_VISUAL := [_U + "farmer_a.glb", true, 3.3]
+const BUILDER_VISUAL := [_U + "worker_a.glb", true, 3.3]
+const BUILD_VISUAL := {
+	7: [_B + "windmill.glb", true, 15.0],
+	8: [_B + "detail-tank-large.glb", false, 10.0],
+	9: [_B + "building-n.glb", false, 13.0],
+	10: [_B + "building-q.glb", false, 17.0],
+}
 const VISUALS := {
 	"USA": {"hq": _B + "building-a.glb", "units": [[_U + "soldier_b.glb", true, 3.6], [_U + "tank_a.glb", false, 7.0]]},
 	"China": {"hq": _B + "building-c.glb", "units": [[_U + "soldier_a.glb", true, 3.6], [_U + "tank_b.glb", false, 7.0]]},
@@ -83,6 +102,14 @@ const OPTION_DEFS := {
 const DEFAULT_OPTIONS := {"money": 500, "speed": 1.0, "unit_cap": 40, "start_units": 4, "teams": "ffa", "powers": true}
 
 
+static func unit_visual(country: String, idx: int) -> Array:
+	if idx == 2:
+		return FARMER_VISUAL
+	if idx == 3:
+		return BUILDER_VISUAL
+	return VISUALS[country]["units"][idx]
+
+
 static func country_names() -> Array:
 	return COUNTRIES.keys()
 
@@ -90,6 +117,8 @@ static func country_names() -> Array:
 static func unit(country: String, idx: int) -> Dictionary:
 	if idx == 2:
 		return FARMER
+	if idx == 3:
+		return BUILDER
 	return COUNTRIES[country]["units"][idx]
 
 
