@@ -4,6 +4,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      windows:
+        description: Also build on a self-hosted Windows runner
+        type: boolean
+        default: false
 
 env:
   # Epic's official image. Pulling it requires your GitHub account to be linked
@@ -19,9 +24,12 @@ jobs:
 
       - name: Free disk space (UE image is huge)
         run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
-          sudo docker image prune --all --force
-          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          sudo systemctl stop docker docker.socket
+          sudo mkdir -p /mnt/docker
+          echo '{"data-root":"/mnt/docker"}' | sudo tee /etc/docker/daemon.json
+          sudo systemctl start docker
+          df -h / /mnt
 
       - name: Log in to GHCR
         run: echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u "${{ secrets.GHCR_USER }}" --password-stdin
@@ -47,7 +55,7 @@ jobs:
   # Windows build: needs a self-hosted Windows runner that has UE 5.4 installed
   # (GitHub-hosted runners cannot fit the engine). Run manually from the Actions tab.
   windows:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && inputs.windows
     runs-on: [self-hosted, windows, unreal]
     steps:
       - uses: actions/checkout@v4
