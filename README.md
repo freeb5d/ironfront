@@ -21,9 +21,20 @@ IronFront is a fast, readable RTS: pick a nation, build an army, and destroy eve
 
 ## Download & play
 
-1. Open the latest successful run in the [**Actions**](https://github.com/freeb5d/ironfront/actions/workflows/build.yml) tab.
-2. Under **Artifacts**, download **IronFront-Windows** (or **IronFront-Linux**) and unzip it.
-3. Run `IronFront.exe`. The game opens fullscreen — press **F11** to toggle windowed mode.
+1. Download **IronFront-Windows.zip** (or the Linux build) from the [**latest release**](https://github.com/freeb5d/ironfront/releases/latest) and unzip it.
+2. Run `IronFront.exe`. The game opens fullscreen — press **F11** to toggle windowed mode.
+3. Windows or your browser may warn about an "unknown publisher" because the game is not code-signed. Choose *Keep* / *More info → Run anyway*; the full source and build log are public in this repository.
+
+Bleeding-edge builds of every commit are also available as artifacts on the [Actions](https://github.com/freeb5d/ironfront/actions/workflows/build.yml) page.
+
+### Features
+
+- Fullscreen, Generals-style interface: command bar, framed minimap, money plate, event messages
+- 5 nations, 8 players, LAN / direct-IP multiplayer, bots with Easy / Normal / Hard difficulty
+- Economy with farmers, $ fields and capturable oil derricks
+- Real-time combat with projectiles, explosions, positional sound effects
+- Control groups, double-click select, attack-move, scoreboard at the end of each match
+- Settings for volume, shadows, fullscreen and edge scrolling (saved between sessions)
 
 ## Nations
 
@@ -76,7 +87,12 @@ Destroy every enemy **headquarters**. A player whose HQ falls is eliminated and 
 | Mouse wheel | Zoom |
 | Minimap click / drag | Jump the camera |
 | **F11** | Toggle fullscreen |
-| **Esc** | Pause menu |
+| **Ctrl + 1..9** / **1..9** | Set / recall a control group (press twice to jump the camera there) |
+| Double-click a unit | Select every visible unit of that type |
+| **Ctrl** + right click | Attack-move (fight everything on the way) |
+| **X** | Stop |
+| **H** / **Home** | Jump to your base |
+| **Esc** | Pause menu and settings |
 
 ## How it works
 

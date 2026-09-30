@@ -29,6 +29,7 @@ func _ready() -> void:
 	_build_main()
 	_build_country()
 	_build_lobby()
+	_build_settings()
 
 	Net.lobby_changed.connect(_refresh)
 	Net.game_started.connect(_on_started)
@@ -113,6 +114,7 @@ func _build_main() -> void:
 	ip_edit.custom_minimum_size = Vector2(360, 44)
 	v.add_child(ip_edit)
 	v.add_child(_btn("JOIN GAME", _on_join_pressed))
+	v.add_child(_btn("SETTINGS", _show.bind("settings")))
 	v.add_child(_btn("QUIT", get_tree().quit))
 
 	msg = _center(UI.label("", 18, Color("ff7b72")))
@@ -240,6 +242,17 @@ func _on_server_lost() -> void:
 	Net.reset()
 	_show("main")
 	msg.text = "Disconnected from the host."
+
+
+# ------------------------------------------------------------------ settings
+
+func _build_settings() -> void:
+	var v: VBoxContainer = _screen("settings")
+	v.add_child(_center(UI.label("SETTINGS", 44, UI.ACCENT)))
+	var panel: PanelContainer = PanelContainer.new()
+	panel.add_child(UI.settings_box(func(): pass))
+	v.add_child(panel)
+	v.add_child(_btn("BACK", _show.bind("main"), 260.0))
 
 
 # ------------------------------------------------------------------ lobby

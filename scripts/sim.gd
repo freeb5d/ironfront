@@ -49,6 +49,10 @@ var status: String = ""
 var time: float = 0.0
 var active_count: int = 0
 var farmed: float = 0.0
+var difficulty: int = 1 # bots: 0 easy, 1 normal, 2 hard
+var kills: Array = []
+var lost: Array = []
+var earned: Array = []
 var rand: RandomNumberGenerator = RandomNumberGenerator.new()
 var _next_id: int = 1
 
@@ -65,6 +69,9 @@ func setup(p_slots: Array, seed_value: int) -> void:
 		bot_timer.append(rand.randf_range(1.0, 4.0))
 		hq_pos.append(Data.slot_pos(i))
 		hq_ids.append(-1)
+		kills.append(0)
+		lost.append(0)
+		earned.append(0.0)
 		if active:
 			active_count += 1
 			_spawn_hq(i)
@@ -192,6 +199,23 @@ func cmd_harvest(slot: int, ids: Array, node_id: int) -> void:
 		e.fstate = 3 if e.carry > 0.0 else 1
 
 
+func cmd_stop(slot: int, ids: Array) -> void:
+	for id in ids:
+		var e = ents.get(id)
+		if e == null or e.owner != slot or e.kind < 1 or e.kind > 3:
+			continue
+		e.target = -1
+		e.has_goal = false
+		e.atk_move = false
+
+
+func stats() -> Array:
+	var earned_i: Array = []
+	for v in earned:
+		earned_i.append(int(v))
+	return [kills, lost, earned_i]
+
+
 func cmd_train(slot: int, idx: int) -> bool:
 	if slot < 0 or slot >= alive.size() or not alive[slot] or status != "":
 		return false
@@ -214,6 +238,8 @@ func step(dt: float) -> void:
 		if alive[i]:
 			money[i] += Data.INCOME * dt
 			if slots[i]["type"] == "bot":
+				if difficulty == 2:
+					money[i] += Data.INCOME * dt # hard bots get double passive income
 				_bot(i, dt)
 	for e in ents.values():
 		if e.kind == 1 or e.kind == 2:
@@ -271,7 +297,10 @@ func _tick_unit(e: Ent, dt: float) -> void:
 		if dist <= e.rng:
 			if e.cd_left <= 0.0:
 				e.cd_left = e.cd
+				var was_alive: bool = t.hp > 0.0
 				t.hp -= e.dmg
+				if was_alive and t.hp <= 0.0:
+					kills[e.owner] += 1
 				if shots.size() < MAX_SHOTS * 6:
 					shots.append(e.id)
 					shots.append(e.pos.x)
@@ -346,6 +375,7 @@ func _tick_farmer(e: Ent, dt: float) -> void:
 			_move(e, hq.pos, dt)
 			if _flat(e.pos, hq.pos) < hq.radius + e.radius + 2.5:
 				money[e.owner] += e.carry
+				earned[e.owner] += e.carry
 				farmed += e.carry
 				e.carry = 0.0
 				e.fstate = 1
@@ -373,6 +403,7 @@ func _update_oil(dt: float) -> void:
 		o.hp = o.max_hp * (0.05 + 0.95 * o.cap_t / OIL_CAPTURE_TIME)
 		if o.owner >= 0 and alive[o.owner]:
 			money[o.owner] += Data.OIL_INCOME * dt
+			earned[o.owner] += Data.OIL_INCOME * dt
 
 
 func _separate() -> void:
@@ -433,6 +464,8 @@ func _reap() -> void:
 				dead.append(e)
 		for e in dead:
 			ents.erase(e.id)
+			if e.kind >= 1 and e.kind <= 3 and alive[e.owner]:
+				lost[e.owner] += 1
 			if e.kind == 0 and alive[e.owner]:
 				alive[e.owner] = false
 				for o in ents.values():
@@ -486,7 +519,7 @@ func _bot(slot: int, dt: float) -> void:
 	bot_timer[slot] -= dt
 	if bot_timer[slot] > 0.0:
 		return
-	bot_timer[slot] = rand.randf_range(2.5, 4.5)
+	bot_timer[slot] = rand.randf_range(2.5, 4.5) * [1.6, 1.0, 0.7][difficulty]
 	var farmers: int = 0
 	for e in ents.values():
 		if e.owner == slot and e.kind == 3:
@@ -505,7 +538,7 @@ func _bot(slot: int, dt: float) -> void:
 	for e in ents.values():
 		if e.owner == slot and (e.kind == 1 or e.kind == 2) and not e.has_goal and e.target == -1:
 			idle.append(e.id)
-	if idle.size() >= 12:
+	if idle.size() >= [16, 12, 9][difficulty]:
 		var tgt: Vector3 = Vector3.INF
 		if rand.randf() < 0.4:
 			tgt = _nearest_oil(slot)

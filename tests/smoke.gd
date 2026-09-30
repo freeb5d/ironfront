@@ -8,11 +8,17 @@ func _initialize() -> void:
 	var names: Array = Data.country_names()
 	for i in Data.MAX_SLOTS:
 		slots.append({"type": "bot", "peer": 0, "name": "Bot", "country": names[i % names.size()]})
+	for kind in ["shot", "cannon", "boom", "click", "coin", "capture", "alarm", "ready"]:
+		var w: AudioStreamWAV = Sfx.make(kind)
+		if w == null or w.data.size() < 100:
+			printerr("sound failed to generate: " + kind)
+			quit(1)
+			return
 	var sim: Sim = Sim.new()
 	sim.setup(slots, 12345)
 
 	var ok: bool = true
-	for path in ["res://scripts/net.gd", "res://scripts/ui.gd", "res://scripts/minimap.gd", "res://scripts/menu.gd", "res://scripts/game.gd"]:
+	for path in ["res://scripts/net.gd", "res://scripts/ui.gd", "res://scripts/minimap.gd", "res://scripts/menu.gd", "res://scripts/game.gd", "res://scripts/sfx.gd"]:
 		var sc = load(path)
 		if sc == null or not sc.can_instantiate():
 			printerr("script failed to compile: " + path)

@@ -33,6 +33,18 @@ var info_label: RichTextLabel
 var unit_bar: ProgressBar
 var msgs: Array = []          # [text, ttl, colour]
 var last_alert: float = -99.0
+var sun: DirectionalLight3D
+var stats: Array = []         # [kills[], lost[], earned[]] per slot
+var t0: float = Time.get_ticks_msec() / 1000.0
+var last_coin: float = -99.0
+var last_ready: float = -99.0
+var groups: Dictionary = {}   # 1..9 -> [unit ids]
+var group_tap: Dictionary = {}
+var last_click_t: float = -99.0
+var last_click_kind: int = -1
+var end_layer: CanvasLayer = null
+var final_shown: bool = false
+var elim_shown: bool = false
 
 var cam_pivot: Node3D
 var cam: Camera3D
@@ -62,6 +74,7 @@ func _ready() -> void:
 	Net.server_lost.connect(_leave)
 	if multiplayer.is_server():
 		sim = Sim.new()
+		sim.difficulty = Net.difficulty
 		sim.setup(Net.slots, Net.seed_value)
 		Net.peer_left.connect(_on_peer_left)
 		ready_peers[1] = true
@@ -90,6 +103,16 @@ func _autotest_finish() -> void:
 	_update_projectiles(0.05)
 	_update_projectiles(1.0)
 	_burst(Vector3(5, 1, 5), 20, 0.5, 0.3, Color(1, 0.5, 0.1), 8.0, Vector3(0, -9, 0))
+	# sound, hotkeys, groups, stop and the scoreboard
+	for k in ["shot", "cannon", "boom", "click", "coin", "capture", "alarm", "ready"]:
+		_play3d(k, Vector3(3, 0, 3), -10.0)
+		_play_ui(k, -20.0)
+	_group_key(1, true)
+	_group_key(1, false)
+	_center_on_hq()
+	_stop_selected()
+	_show_end("VICTORY", true)
+	print("AUTOTEST FEATURES stats=%d groups=%d" % [stats.size(), groups.size()])
 	# simulate a click-drag pan
 	drag_start = Vector2(400, 300)
 	pan_anchor = _ground_point(drag_start)
@@ -136,8 +159,9 @@ func _build_world() -> void:
 	we.environment = env
 	add_child(we)
 
-	var sun: DirectionalLight3D = DirectionalLight3D.new()
+	sun = DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-55, 30, 0)
+	sun.shadow_enabled = Net.shadows
 	add_child(sun)
 
 	var ground: MeshInstance3D = MeshInstance3D.new()
@@ -543,6 +567,11 @@ func _build_pause() -> void:
 	fs.custom_minimum_size = Vector2(300, 50)
 	fs.pressed.connect(Net.toggle_fullscreen)
 	v.add_child(fs)
+	v.add_child(UI.settings_box(_apply_settings))
+	var keys: Label = UI.label("Hotkeys:  Ctrl+1..9 set group,  1..9 select (twice = jump)  |  H base  |  X stop  |  Ctrl+right-click attack-move  |  double-click = all of that type  |  F army  |  G farmers", 13, Color("8b98a9"))
+	keys.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	keys.custom_minimum_size = Vector2(300, 0)
+	v.add_child(keys)
 	var leave: Button = Button.new()
 	leave.text = "LEAVE MATCH"
 	leave.custom_minimum_size = Vector2(300, 50)
@@ -629,7 +658,8 @@ func _process(dt: float) -> void:
 				line = "[s][color=#6b7280]%s  %s[/color][/s]  [color=#ff7b72]OUT[/color]" % [n, sl["country"]]
 			lines.append(line)
 	players_label.text = "\n".join(lines)
-	status_label.text = status_text
+	status_label.text = ""
+	_check_end()
 	minimap.queue_redraw()
 
 	if dragging:
@@ -667,15 +697,22 @@ func _physics_process(dt: float) -> void:
 		var shots: PackedFloat32Array = sim.shots
 		sim.shots = PackedFloat32Array()
 		var mp: PackedFloat32Array = sim.money_packed()
-		on_snapshot.rpc(snap, shots, mp, sim.alive, sim.status)
-		on_snapshot(snap, shots, mp, sim.alive, sim.status)
+		var st: Array = sim.stats()
+		on_snapshot.rpc(snap, shots, mp, sim.alive, sim.status, st)
+		on_snapshot(snap, shots, mp, sim.alive, sim.status, st)
 
 
 @rpc("authority", "unreliable_ordered")
-func on_snapshot(snap: PackedFloat32Array, shots: PackedFloat32Array, money_p: PackedFloat32Array, alive_p: Array, status: String) -> void:
+func on_snapshot(snap: PackedFloat32Array, shots: PackedFloat32Array, money_p: PackedFloat32Array, alive_p: Array, status: String, stats_p: Array) -> void:
+	var now_s: float = Time.get_ticks_msec() / 1000.0
+	if my_slot >= 0 and my_slot < money_p.size() and my_slot < money.size():
+		if money_p[my_slot] - money[my_slot] >= 30.0 and now_s - last_coin > 0.35:
+			last_coin = now_s
+			_play_ui("coin", -12.0)
 	money = money_p
 	alive_arr = alive_p
 	status_text = status
+	stats = stats_p
 	var seen: Dictionary = {}
 	var n: int = floori(snap.size() / 6.0)
 	for k in n:
@@ -689,12 +726,16 @@ func on_snapshot(snap: PackedFloat32Array, shots: PackedFloat32Array, money_p: P
 		if not views.has(id):
 			_make_view(id, kind, owner)
 			views[id].position = p
+			if owner == my_slot and kind >= 1 and kind <= 3 and now_s - t0 > 3.0 and now_s - last_ready > 0.2:
+				last_ready = now_s
+				_play_ui("ready", -10.0)
 		targets[id] = p
 		if kind == 0 and owner == my_slot and info.has(id) and frac < float(info[id][2]) - 0.001:
 			var now: float = Time.get_ticks_msec() / 1000.0
 			if now - last_alert > 10.0 and msg_label != null:
 				last_alert = now
 				_msg("Your base is under attack!", Color(1.0, 0.4, 0.35))
+				_play_ui("alarm", -4.0)
 		info[id] = [kind, owner, frac]
 		if int(views[id].get_meta("owner", -99)) != owner:
 			_set_owner(id, owner)
@@ -707,8 +748,10 @@ func on_snapshot(snap: PackedFloat32Array, shots: PackedFloat32Array, money_p: P
 				_msg("A money field has run dry", Color(0.8, 0.8, 0.8))
 				_burst(bpos, 12, 0.6, 0.2, Color(1.0, 0.85, 0.2), 5.0, Vector3(0, -9, 0))
 			elif kd == 0:
+				_play3d("boom", bpos, 4.0)
 				_burst(bpos, 60, 1.0, 0.6, Color(1.0, 0.45, 0.1), 14.0, Vector3(0, -8, 0))
 			elif kd == 2:
+				_play3d("boom", bpos, -4.0)
 				_burst(bpos, 24, 0.7, 0.4, Color(1.0, 0.45, 0.1), 9.0, Vector3(0, -10, 0))
 			else:
 				_burst(bpos, 8, 0.4, 0.15, Color(0.85, 0.2, 0.1), 4.0, Vector3(0, -10, 0))
@@ -845,8 +888,10 @@ func _set_owner(id: int, owner: int) -> void:
 	if info.has(id) and info[id][0] == 4 and msg_label != null:
 		if owner == my_slot:
 			_msg("Oil derrick captured", Color(0.5, 1.0, 0.5))
+			_play_ui("capture", -6.0)
 		elif prev == my_slot:
 			_msg("Oil derrick lost!", Color(1.0, 0.45, 0.4))
+			_play_ui("alarm", -8.0)
 		elif owner >= 0:
 			_msg("%s captured an oil derrick" % str(Net.slots[owner]["country"]), Color(1.0, 0.85, 0.3))
 	v.set_meta("owner", owner)
@@ -1077,6 +1122,174 @@ func _update_hp(id: int, _kind: int, frac: float) -> void:
 	bar.scale.x = maxf(frac, 0.01)
 
 
+func _play3d(kind: String, pos: Vector3, vol: float = 0.0) -> void:
+	if get_tree().get_nodes_in_group("sfx").size() > 28:
+		return
+	var p: AudioStreamPlayer3D = AudioStreamPlayer3D.new()
+	p.add_to_group("sfx")
+	p.stream = Net.sfx(kind)
+	p.volume_db = vol
+	p.unit_size = 70.0
+	p.max_distance = 420.0
+	p.position = pos
+	add_child(p)
+	p.play()
+	p.finished.connect(p.queue_free)
+
+
+func _play_ui(kind: String, vol: float = -6.0) -> void:
+	var p: AudioStreamPlayer = AudioStreamPlayer.new()
+	p.stream = Net.sfx(kind)
+	p.volume_db = vol
+	add_child(p)
+	p.play()
+	p.finished.connect(p.queue_free)
+
+
+func _apply_settings() -> void:
+	if sun != null:
+		sun.shadow_enabled = Net.shadows
+
+
+func _group_key(n: int, assign: bool) -> void:
+	if assign:
+		groups[n] = selected.keys()
+		_msg("Group %d set (%d units)" % [n, selected.size()], Color(0.7, 0.85, 1.0))
+		return
+	if not groups.has(n):
+		return
+	selected.clear()
+	var sum: Vector3 = Vector3.ZERO
+	var cnt: int = 0
+	for id in groups[n]:
+		if info.has(id):
+			selected[id] = true
+			sum += targets[id]
+			cnt += 1
+	var now_g: float = Time.get_ticks_msec() / 1000.0
+	if cnt > 0 and now_g - float(group_tap.get(n, -9.0)) < 0.4:
+		cam_pivot.position = Vector3(sum.x / cnt, 0.0, sum.z / cnt)
+	group_tap[n] = now_g
+
+
+func _center_on_hq() -> void:
+	for id in info:
+		if info[id][0] == 0 and info[id][1] == my_slot:
+			cam_pivot.position = Vector3(targets[id].x, 0.0, targets[id].z)
+			return
+
+
+func _stop_selected() -> void:
+	if selected.is_empty() or my_slot < 0:
+		return
+	var ids: Array = selected.keys()
+	if multiplayer.is_server():
+		if sim != null:
+			sim.cmd_stop(my_slot, ids)
+	else:
+		srv_stop.rpc_id(1, ids)
+
+
+@rpc("any_peer", "reliable")
+func srv_stop(ids: Array) -> void:
+	if not multiplayer.is_server() or sim == null or ids.size() > 200:
+		return
+	var slot: int = _slot_of(multiplayer.get_remote_sender_id())
+	if slot >= 0:
+		sim.cmd_stop(slot, ids)
+
+
+func _check_end() -> void:
+	if my_slot < 0 or alive_arr.size() <= my_slot:
+		return
+	var me_alive: bool = alive_arr[my_slot]
+	if status_text != "" and not final_shown:
+		final_shown = true
+		elim_shown = true
+		var title: String = "DRAW"
+		if status_text.begins_with("WINNER"):
+			title = "VICTORY" if me_alive else "DEFEAT"
+		_show_end(title, true)
+	elif status_text == "" and not me_alive and not elim_shown:
+		elim_shown = true
+		_show_end("DEFEAT", false)
+
+
+func _show_end(title: String, final: bool) -> void:
+	if end_layer != null:
+		end_layer.queue_free()
+	end_layer = CanvasLayer.new()
+	end_layer.layer = 9
+	add_child(end_layer)
+	var root: Control = Control.new()
+	root.theme = UI.make_theme()
+	end_layer.add_child(root)
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var dim: ColorRect = ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.6)
+	root.add_child(dim)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var c: CenterContainer = CenterContainer.new()
+	root.add_child(c)
+	c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var p: PanelContainer = PanelContainer.new()
+	c.add_child(p)
+	var v: VBoxContainer = VBoxContainer.new()
+	v.add_theme_constant_override("separation", 12)
+	p.add_child(v)
+
+	var tcol: Color = UI.ACCENT if title == "VICTORY" else (Color(1.0, 0.4, 0.35) if title == "DEFEAT" else Color(0.8, 0.8, 0.8))
+	var t: Label = UI.label(title, 72, tcol)
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(t)
+	var secs: int = int(Time.get_ticks_msec() / 1000.0 - t0)
+	var sub: Label = UI.label(("Match time %d:%02d" % [secs / 60, secs % 60]) + ("" if final else "   -   you have been eliminated, the match goes on"), 16, Color("8b98a9"))
+	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(sub)
+
+	var grid: GridContainer = GridContainer.new()
+	grid.columns = 5
+	grid.add_theme_constant_override("h_separation", 28)
+	grid.add_theme_constant_override("v_separation", 6)
+	v.add_child(grid)
+	for h in ["Commander", "Nation", "Kills", "Lost", "Earned"]:
+		grid.add_child(UI.label(h, 16, Color("8b98a9")))
+	var order: Array = []
+	for i in Net.slots.size():
+		if Net.slots[i]["type"] == "human" or Net.slots[i]["type"] == "bot":
+			order.append(i)
+	if stats.size() >= 3:
+		order.sort_custom(func(a: int, b: int): return stats[0][a] > stats[0][b])
+	for i in order:
+		var nm: String = str(Net.slots[i]["name"]) if str(Net.slots[i]["name"]) != "" else "Bot"
+		var out: bool = i < alive_arr.size() and not alive_arr[i]
+		var col: Color = Data.PLAYER_COLORS[i] if not out else Color("6b7280")
+		var k_: String = str(stats[0][i]) if stats.size() >= 3 else "-"
+		var l_: String = str(stats[1][i]) if stats.size() >= 3 else "-"
+		var e_: String = "$" + str(stats[2][i]) if stats.size() >= 3 else "-"
+		grid.add_child(UI.label(nm + ("  (you)" if i == my_slot else ""), 18, col))
+		grid.add_child(UI.label(str(Net.slots[i]["country"]), 18, col))
+		grid.add_child(UI.label(k_, 18, col))
+		grid.add_child(UI.label(l_, 18, col))
+		grid.add_child(UI.label(e_, 18, col))
+
+	var bar: HBoxContainer = HBoxContainer.new()
+	bar.alignment = BoxContainer.ALIGNMENT_CENTER
+	bar.add_theme_constant_override("separation", 16)
+	v.add_child(bar)
+	if not final:
+		var keep: Button = Button.new()
+		keep.text = "KEEP WATCHING"
+		keep.custom_minimum_size = Vector2(240, 50)
+		keep.pressed.connect(func(): end_layer.visible = false)
+		bar.add_child(keep)
+	var leave: Button = Button.new()
+	leave.text = "RETURN TO MENU"
+	leave.custom_minimum_size = Vector2(240, 50)
+	leave.pressed.connect(_leave)
+	bar.add_child(leave)
+
+
 func _turn(cur: float, tgt: float, step: float) -> float:
 	return cur + clampf(wrapf(tgt - cur, -PI, PI), -step, step)
 
@@ -1096,6 +1309,8 @@ func _spawn_shot(shooter: int, from: Vector3, to: Vector3, kind: int) -> void:
 		v.set_meta("aim", atan2(dv.x, dv.z))
 		v.set_meta("aim_t", 0.7)
 		v.set_meta("shoot_t", 0.5)
+	if dv.length() >= 0.5:
+		_play3d("cannon" if kind == 2 else "shot", from, -2.0 if kind == 2 else -9.0)
 	if projectiles.size() >= 60 or dv.length() < 0.5:
 		return
 	var heavy: bool = kind == 2
@@ -1174,7 +1389,7 @@ func _pan_camera(dt: float) -> void:
 	var vp: Viewport = get_viewport()
 	var m: Vector2 = vp.get_mouse_position()
 	var sz: Vector2 = vp.get_visible_rect().size
-	if Rect2(Vector2.ZERO, sz).has_point(m):
+	if Net.edge_pan and Rect2(Vector2.ZERO, sz).has_point(m):
 		if m.x <= 4.0:
 			dir.x -= 1.0
 		if m.x >= sz.x - 4.0:
@@ -1236,6 +1451,12 @@ func _unhandled_input(ev: InputEvent) -> void:
 			_train(2)
 		elif ev.keycode == KEY_G:
 			_select_kinds([3])
+		elif ev.keycode >= KEY_1 and ev.keycode <= KEY_9:
+			_group_key(ev.keycode - KEY_0, ev.ctrl_pressed)
+		elif ev.keycode == KEY_H or ev.keycode == KEY_HOME:
+			_center_on_hq()
+		elif ev.keycode == KEY_X:
+			_stop_selected()
 		elif ev.keycode == KEY_ESCAPE:
 			pause_layer.visible = not pause_layer.visible
 
@@ -1273,6 +1494,15 @@ func _finish_drag(end: Vector2) -> void:
 					best = id
 		if best != -1:
 			selected[best] = true
+		var now_c: float = Time.get_ticks_msec() / 1000.0
+		if best != -1 and now_c - last_click_t < 0.35 and last_click_kind == int(info[best][0]):
+			var vr: Rect2 = get_viewport().get_visible_rect()
+			for id2 in info:
+				if info[id2][1] == my_slot and info[id2][0] == info[best][0]:
+					if vr.has_point(cam.unproject_position(views[id2].position)):
+						selected[id2] = true
+		last_click_t = now_c
+		last_click_kind = int(info[best][0]) if best != -1 else -1
 	else:
 		_box_select(drag_start, end)
 
@@ -1327,10 +1557,11 @@ func _right_click(sp: Vector2) -> void:
 		else:
 			srv_harvest.rpc_id(1, ids, field)
 	else:
+		var amove: bool = oil or Input.is_key_pressed(KEY_CTRL)
 		if multiplayer.is_server():
-			sim.cmd_move(my_slot, ids, g, oil)
+			sim.cmd_move(my_slot, ids, g, amove)
 		else:
-			srv_move.rpc_id(1, ids, g, oil)
+			srv_move.rpc_id(1, ids, g, amove)
 
 
 func _train(idx: int) -> void:

@@ -39,7 +39,70 @@ static func make_theme() -> Theme:
 	t.set_color("font_color", "LineEdit", TEXT)
 	t.set_color("font_color", "Label", TEXT)
 	t.set_color("default_color", "RichTextLabel", TEXT)
+	t.set_color("font_color", "CheckButton", TEXT)
+	t.set_color("font_hover_color", "CheckButton", ACCENT)
+	t.set_color("font_pressed_color", "CheckButton", TEXT)
+	t.set_stylebox("focus", "CheckButton", StyleBoxEmpty.new())
 	return t
+
+
+static func _check(text: String, value: bool, setter: Callable, on_change: Callable) -> CheckButton:
+	var c: CheckButton = CheckButton.new()
+	c.text = text
+	c.button_pressed = value
+	c.toggled.connect(func(on: bool):
+		setter.call(on)
+		Net.save_settings()
+		on_change.call())
+	return c
+
+
+## Settings controls shared by the main menu and the in-game pause menu.
+static func settings_box(on_change: Callable) -> VBoxContainer:
+	var v: VBoxContainer = VBoxContainer.new()
+	v.add_theme_constant_override("separation", 10)
+
+	var vol_row: HBoxContainer = HBoxContainer.new()
+	vol_row.add_theme_constant_override("separation", 16)
+	var vol_label: Label = label("Volume", 18)
+	vol_label.custom_minimum_size = Vector2(110, 0)
+	vol_row.add_child(vol_label)
+	var sl: HSlider = HSlider.new()
+	sl.min_value = 0.0
+	sl.max_value = 1.0
+	sl.step = 0.05
+	sl.value = Net.volume
+	sl.custom_minimum_size = Vector2(240, 28)
+	sl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	sl.value_changed.connect(func(x: float):
+		Net.volume = x
+		Net.apply_audio()
+		Net.save_settings()
+		on_change.call())
+	vol_row.add_child(sl)
+	v.add_child(vol_row)
+
+	v.add_child(_check("Fullscreen", DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN, Net.set_fullscreen, on_change))
+	v.add_child(_check("Shadows (needs a stronger graphics card)", Net.shadows, func(on: bool): Net.shadows = on, on_change))
+	v.add_child(_check("Scroll the map at screen edges", Net.edge_pan, func(on: bool): Net.edge_pan = on, on_change))
+
+	var diff_row: HBoxContainer = HBoxContainer.new()
+	diff_row.add_theme_constant_override("separation", 16)
+	var diff_label: Label = label("Bot difficulty", 18)
+	diff_label.custom_minimum_size = Vector2(110, 0)
+	diff_row.add_child(diff_label)
+	var ob: OptionButton = OptionButton.new()
+	for t in ["Easy", "Normal", "Hard"]:
+		ob.add_item(t)
+	ob.selected = Net.difficulty
+	ob.custom_minimum_size = Vector2(160, 0)
+	ob.item_selected.connect(func(idx: int):
+		Net.difficulty = idx
+		Net.save_settings()
+		on_change.call())
+	diff_row.add_child(ob)
+	v.add_child(diff_row)
+	return v
 
 
 static func gradient_bg() -> TextureRect:
