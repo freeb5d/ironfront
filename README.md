@@ -33,6 +33,8 @@ Bleeding-edge builds of every commit are also available as artifacts on the [Act
 - 5 nations, 8 players, LAN / direct-IP multiplayer, bots with Easy / Normal / Hard difficulty
 - Economy with farmers, $ fields and capturable oil derricks
 - Real-time combat with projectiles, explosions, positional sound effects
+- Veterancy: units earn ranks (veteran, elite, heroic) from kills and get stronger, heroic units self-repair
+- Commander points and powers (per nation): targeted strike, reinforcements, field repair
 - Control groups, double-click select, attack-move, scoreboard at the end of each match
 - Settings for volume, shadows, fullscreen and edge scrolling (saved between sessions)
 
@@ -92,6 +94,7 @@ Destroy every enemy **headquarters**. A player whose HQ falls is eliminated and 
 | **Ctrl** + right click | Attack-move (fight everything on the way) |
 | **X** | Stop |
 | **H** / **Home** | Jump to your base |
+| **Z** / **C** / **V** | Commander powers: strike (then click the map) / reinforcements / field repair |
 | **Esc** | Pause menu and settings |
 
 ## How it works
@@ -116,7 +119,11 @@ tests/smoke.gd   headless full-match test run by CI
 
 ## Roadmap
 
-- [ ] Base building and resource nodes
+- [x] Veterancy and commander powers
+- [ ] Base building with builders, power plants and a tech tree
+- [ ] Superweapons and upgrades
+- [ ] Challenge ladder (single-player boss battles)
+- [ ] Garrisonable buildings
 - [ ] Pathfinding and unit collision
 - [ ] Teams / alliances
 - [ ] Nation special powers
