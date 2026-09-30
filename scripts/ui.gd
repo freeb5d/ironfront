@@ -66,6 +66,9 @@ static func make_theme() -> Theme:
 	t.set_color("default_color", "RichTextLabel", TEXT)
 	t.set_stylebox("background", "ProgressBar", box(Color(0.05, 0.08, 0.12), BORDER, 2, 4))
 	t.set_stylebox("fill", "ProgressBar", box(ACCENT, Color(0, 0, 0, 0), 0, 4))
+	t.set_stylebox("panel", "TooltipPanel", box(Color(0.06, 0.09, 0.14, 0.97), ACCENT, 1, 4))
+	t.set_color("font_color", "TooltipLabel", TEXT)
+	t.set_font_size("font_size", "TooltipLabel", 17)
 	t.set_color("font_color", "CheckButton", TEXT)
 	t.set_color("font_hover_color", "CheckButton", ACCENT)
 	t.set_color("font_pressed_color", "CheckButton", TEXT)
@@ -141,6 +144,7 @@ static func settings_box(on_change: Callable) -> Control:
 	v.add_child(_check("Always show health bars", Net.always_bars, func(on: bool): Net.always_bars = on, on_change))
 
 	v.add_child(_header("GAME"))
+	v.add_child(_check("Show gameplay tips", Net.tips, func(on: bool): Net.tips = on, on_change))
 	var diff_row: HBoxContainer = HBoxContainer.new()
 	diff_row.add_theme_constant_override("separation", 16)
 	var diff_label: Label = label("Bot difficulty", 18)

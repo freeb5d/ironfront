@@ -115,6 +115,47 @@ const OPTION_DEFS := {
 const DEFAULT_OPTIONS := {"money": 500, "speed": 1.0, "unit_cap": 40, "start_units": 4, "teams": "ffa", "powers": true}
 
 
+# Single-player "Challenge" ladder. Player is always slot 0 (team 0); bots come from `bots`.
+const CHALLENGE := [
+	{"title": "Border Skirmish", "desc": "One weak opponent. Learn the basics.", "difficulty": 0, "bot_money": 0,
+		"bots": [{"slot": 4, "country": "China", "team": 1}]},
+	{"title": "Oil Rush", "desc": "A sharper rival who fights you for the oil.", "difficulty": 1, "bot_money": 0,
+		"bots": [{"slot": 4, "country": "Russia", "team": 1}]},
+	{"title": "Two Fronts", "desc": "Two rivals attack you and each other.", "difficulty": 1, "bot_money": 200,
+		"bots": [{"slot": 2, "country": "Israel", "team": 1}, {"slot": 6, "country": "Iran", "team": 2}]},
+	{"title": "Allied Offensive", "desc": "You and an ally against two hard opponents.", "difficulty": 2, "bot_money": 300,
+		"bots": [{"slot": 1, "country": "USA", "team": 0}, {"slot": 4, "country": "China", "team": 1}, {"slot": 6, "country": "Russia", "team": 1}]},
+	{"title": "The Final Stand", "desc": "Three hard opponents united against you.", "difficulty": 2, "bot_money": 800,
+		"bots": [{"slot": 2, "country": "USA", "team": 1}, {"slot": 4, "country": "China", "team": 1}, {"slot": 6, "country": "Israel", "team": 1}]},
+]
+
+# Tooltip texts
+const TRAIN_TIPS := [
+	"Light infantry: cheap and quick. Trained at your base, faster with Barracks.",
+	"Heavy vehicle: tough and hard-hitting. Needs a War Factory.",
+	"Farmer: harvests the green $ fields and carries money to your HQ or Supply Depot.",
+	"Builder: constructs buildings. Select it, then pick a building to place.",
+]
+const POWER_TIPS := [
+	"Targeted strike: click the map, a barrage lands after a short warning. Costs 1 commander point.",
+	"Reinforcements: four light units arrive at your base. Costs 1 commander point.",
+	"Field repair: heals all your units and buildings by 60%. Costs 1 commander point.",
+	"Superweapon: huge delayed blast with a big warning ring. Needs the Superweapon building.",
+]
+const UPGRADE_TIPS := [
+	"+25% health for all your units. Needs a Barracks.",
+	"+20% damage for all your units. Needs a Barracks.",
+	"Farmers carry 50% more money per trip.",
+]
+const BUILD_TIPS := {
+	7: "Produces power. Every other building needs power; low power slows production and turns off turrets.",
+	8: "Drop-off point for farmers, so they walk less. Build it near the $ fields side of your base.",
+	9: "Trains infantry faster and unlocks Armor and Weapon upgrades. Required for the War Factory.",
+	10: "Unlocks heavy vehicles. Required for the Superweapon.",
+	11: "Automatic defence. Needs power.",
+	12: "Late-game superweapon. Fire it with J and click the target.",
+}
+
 static func unit_visual(country: String, idx: int) -> Array:
 	if idx == 2:
 		return FARMER_VISUAL

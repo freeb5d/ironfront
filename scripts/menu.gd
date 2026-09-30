@@ -4,6 +4,7 @@ extends Control
 const OFFLINE := 1
 const HOST := 2
 const JOIN := 3
+const CHALLENGE := 4
 
 var pending: int = 0
 var chosen: String = "USA"
@@ -56,6 +57,7 @@ func _ready() -> void:
 	_build_country()
 	_build_lobby()
 	_build_settings()
+	_build_challenge()
 
 	Net.lobby_changed.connect(_refresh)
 	Net.game_started.connect(_on_started)
@@ -63,6 +65,10 @@ func _ready() -> void:
 	Net.server_lost.connect(_on_server_lost)
 	_show("main")
 	_refresh()
+
+	if Net.challenge_autostart:
+		Net.challenge_autostart = false
+		_resume_challenge.call_deferred()
 
 	if "--autotest" in OS.get_cmdline_user_args():
 		_run_autotest()
@@ -75,6 +81,11 @@ func _run_autotest() -> void:
 	_show("settings")
 	await get_tree().create_timer(0.3).timeout
 	await Net.shot("02_settings")
+	pending = CHALLENGE
+	chosen = "USA"
+	_confirm()
+	await get_tree().create_timer(0.3).timeout
+	await Net.shot("05_challenge")
 	_pick(HOST)
 	await get_tree().create_timer(0.5).timeout
 	await Net.shot("03_nation_select")
@@ -259,6 +270,7 @@ func _build_main() -> void:
 	v.add_child(name_edit)
 
 	v.add_child(_btn("PLAY OFFLINE  -  VS 7 BOTS", _pick.bind(OFFLINE), 420.0, true))
+	v.add_child(_btn("CHALLENGE  -  5 SINGLE-PLAYER STAGES", _pick.bind(CHALLENGE), 420.0, true))
 	v.add_child(_btn("HOST MULTIPLAYER GAME", _pick.bind(HOST), 420.0, true))
 
 	ip_edit = LineEdit.new()
@@ -382,6 +394,9 @@ func _confirm() -> void:
 			for i in range(1, Data.MAX_SLOTS):
 				Net.host_set_type(i, "bot")
 				Net.set_country(i, names[randi() % names.size()])
+		CHALLENGE:
+			_refresh_challenge()
+			_show("challenge")
 		HOST:
 			if Net.host_game(_pname()) != OK:
 				_show("main")
@@ -406,6 +421,76 @@ func _on_server_lost() -> void:
 	Net.reset()
 	_show("main")
 	msg.text = "Disconnected from the host."
+
+
+# ------------------------------------------------------------------ challenge ladder
+
+var ch_rows: VBoxContainer
+var ch_title: Label
+
+
+func _build_challenge() -> void:
+	var v: VBoxContainer = _screen("challenge")
+	ch_title = _center(UI.label("CHALLENGE", 44, UI.ACCENT))
+	v.add_child(ch_title)
+	var panel: PanelContainer = PanelContainer.new()
+	ch_rows = VBoxContainer.new()
+	ch_rows.add_theme_constant_override("separation", 8)
+	panel.add_child(ch_rows)
+	v.add_child(panel)
+	var bar: HBoxContainer = HBoxContainer.new()
+	bar.alignment = BoxContainer.ALIGNMENT_CENTER
+	bar.add_child(_btn("BACK", _show.bind("main"), 240.0))
+	v.add_child(bar)
+
+
+func _refresh_challenge() -> void:
+	ch_title.text = "CHALLENGE  -  %s" % chosen.to_upper()
+	for c in ch_rows.get_children():
+		ch_rows.remove_child(c)
+		c.queue_free()
+	var done: int = int(Net.challenge_progress.get(chosen, 0))
+	for i in Data.CHALLENGE.size():
+		var st: Dictionary = Data.CHALLENGE[i]
+		var row: HBoxContainer = HBoxContainer.new()
+		row.add_theme_constant_override("separation", 16)
+		var num: Label = UI.label(str(i + 1), 34, UI.ACCENT if i <= done else Color("5b6472"))
+		num.custom_minimum_size = Vector2(40, 0)
+		row.add_child(num)
+		var info: VBoxContainer = VBoxContainer.new()
+		info.custom_minimum_size = Vector2(420, 0)
+		info.add_child(UI.label(str(st["title"]), 22))
+		var foes: Array = []
+		var allies: Array = []
+		for b in st["bots"]:
+			if int(b["team"]) == 0:
+				allies.append(b["country"])
+			else:
+				foes.append(b["country"])
+		var line: String = "%s   |   vs %s" % [st["desc"], ", ".join(foes)]
+		if not allies.is_empty():
+			line += "   |   ally: " + ", ".join(allies)
+		var dl: Label = UI.label(line, 14, Color("8b98a9"))
+		dl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		dl.custom_minimum_size = Vector2(420, 0)
+		info.add_child(dl)
+		row.add_child(info)
+		var status: Label = UI.label("COMPLETED" if i < done else ("READY" if i == done else "LOCKED"), 16, Color("7ee787") if i < done else (UI.ACCENT if i == done else Color("6b7280")))
+		status.custom_minimum_size = Vector2(120, 0)
+		row.add_child(status)
+		var go: Button = _btn("START" if i >= done else "REPLAY", _start_stage.bind(i), 140.0)
+		go.disabled = i > done
+		row.add_child(go)
+		ch_rows.add_child(row)
+
+
+func _start_stage(i: int) -> void:
+	Net.my_name = _pname()
+	Net.start_challenge(i, chosen)
+
+
+func _resume_challenge() -> void:
+	Net.start_challenge(int(Net.challenge_resume["stage"]), str(Net.challenge_resume["nation"]))
 
 
 # ------------------------------------------------------------------ settings

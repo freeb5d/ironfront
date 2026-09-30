@@ -119,12 +119,13 @@ func setup(p_slots: Array, seed_value: int, opts: Dictionary = {}) -> void:
 	powers_on = bool(opts.get("powers", true))
 	var start_money: float = float(opts.get("money", Data.START_MONEY))
 	var start_units: int = int(opts.get("start_units", 4))
+	var bot_bonus: float = float(opts.get("bot_money", 0.0))
 	_spawn_map()
 	for i in Data.MAX_SLOTS:
 		var t: String = slots[i]["type"]
 		var active: bool = (t == "human" or t == "bot")
 		alive.append(active)
-		money.append(start_money if active else 0.0)
+		money.append((start_money + (bot_bonus if t == "bot" else 0.0)) if active else 0.0)
 		team.append(int(slots[i].get("team", i)))
 		bot_timer.append(rand.randf_range(1.0, 4.0))
 		hq_pos.append(Data.slot_pos(i))

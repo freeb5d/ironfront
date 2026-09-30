@@ -116,6 +116,21 @@ func _initialize() -> void:
 	if sim2.status != "" and left_teams.size() != 1:
 		printerr("team victory condition is wrong")
 		ok = false
+	# every challenge stage must be a valid match
+	for cst in Data.CHALLENGE:
+		var cs: Array = []
+		for i in Data.MAX_SLOTS:
+			cs.append({"type": "closed", "peer": 0, "name": "", "country": "USA", "team": i})
+		cs[0] = {"type": "human", "peer": 1, "name": "Me", "country": "USA", "team": 0}
+		for b in cst["bots"]:
+			cs[b["slot"]] = {"type": "bot", "peer": 0, "name": "Bot", "country": b["country"], "team": b["team"]}
+		var csim: Sim = Sim.new()
+		csim.setup(cs, 5, {"bot_money": cst["bot_money"]})
+		for k in 30 * 10:
+			csim.step(dt)
+		if csim.team_count < 2:
+			printerr("challenge stage has no opponent: " + str(cst["title"]))
+			ok = false
 	# upgrades and superweapon
 	var sim3: Sim = Sim.new()
 	sim3.setup(slots, 99, {"money": 10000})

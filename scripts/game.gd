@@ -57,6 +57,7 @@ var build_tiles: Array = []
 var super_tile: Button
 var upg_tiles: Array = []
 var shake: float = 0.0
+var tips_shown: Dictionary = {}
 
 var cam_pivot: Node3D
 var cam: Camera3D
@@ -86,7 +87,7 @@ func _ready() -> void:
 	Net.server_lost.connect(_leave)
 	if multiplayer.is_server():
 		sim = Sim.new()
-		sim.difficulty = Net.difficulty
+		sim.difficulty = Net.match_difficulty
 		sim.setup(Net.slots, Net.seed_value, Net.options)
 		Net.peer_left.connect(_on_peer_left)
 		ready_peers[1] = true
@@ -417,10 +418,41 @@ func _empty_tile() -> PanelContainer:
 	return p
 
 
-func _msg(text: String, col: Color = Color(1, 1, 1)) -> void:
-	msgs.append([text, 6.0, col])
+func _msg(text: String, col: Color = Color(1, 1, 1), ttl: float = 6.0) -> void:
+	msgs.append([text, ttl, col])
 	if msgs.size() > 5:
 		msgs.pop_front()
+
+
+func _tip(id: String, text: String) -> void:
+	if not Net.tips or tips_shown.has(id):
+		return
+	tips_shown[id] = true
+	_msg(text, Color(0.75, 0.92, 1.0), 9.0)
+
+
+func _tips_tick() -> void:
+	if my_slot < 0 or info.is_empty():
+		return
+	var elapsed: float = Time.get_ticks_msec() / 1000.0 - t0
+	if elapsed > 3.0:
+		_tip("t1", "Tip: click a unit to select it, right-click to give orders. Hold the LEFT mouse button on empty ground and drag to move the map.")
+	if elapsed > 16.0:
+		_tip("t2", "Tip: farmers (R) carry money from the green $ fields back to your base. More farmers, more income.")
+	if elapsed > 30.0 and not _has_complete(7):
+		_tip("t3", "Tip: click your Builder, then press Y to put down a Power Plant. Buildings need power.")
+	if _has_complete(7):
+		_tip("t4", "Power online. Next: Barracks (I) for faster infantry, then a War Factory (O) to unlock tanks.")
+	if _has_complete(10):
+		_tip("t5", "War Factory ready. Move combat units onto the oil derricks in the middle to capture them for extra income.")
+	if _has_complete(12):
+		_tip("t6", "Superweapon ready. Press J, then click where it should land.")
+
+
+func _challenge_go(stage: int) -> void:
+	Net.challenge_resume = {"stage": stage, "nation": str(Net.challenge["nation"])}
+	Net.challenge_autostart = true
+	_leave()
 
 
 func _select_kinds(kinds: Array) -> void:
@@ -520,6 +552,7 @@ func _build_hud_v2() -> void:
 			grid.add_child(b)
 			_tile_ready(b)
 			train_buttons.append(b)
+			b.tooltip_text = "%s\nHP %d   Damage %d   Range %d" % [Data.TRAIN_TIPS[idx], st["hp"], st["dmg"], st["rng"]] if idx < 2 else str(Data.TRAIN_TIPS[idx])
 		var army_vis: Array = Data.VISUALS[country]["units"][0]
 		var t_army: Button = _tile("Select army\n[F]", _select_kinds.bind([1, 2]), [[army_vis[0], true, 3.2]])
 		grid.add_child(t_army)
@@ -538,6 +571,7 @@ func _build_hud_v2() -> void:
 			pvb.move_child(icon, 0)
 			power_row.add_child(pt)
 			power_tiles.append(pt)
+			pt.tooltip_text = Data.POWER_TIPS[pi]
 		super_tile = _tile("%s\n[J]" % pnames[3], _power_key.bind(3), [])
 		var sicon: PowerIcon = PowerIcon.new()
 		sicon.kind = 4
@@ -545,6 +579,7 @@ func _build_hud_v2() -> void:
 		svb.add_child(sicon)
 		svb.move_child(sicon, 0)
 		power_row.add_child(super_tile)
+		super_tile.tooltip_text = Data.POWER_TIPS[3]
 		for ui in 3:
 			var up: Dictionary = Data.UPGRADES[ui]
 			var ut: Button = _tile("%s\n$%d" % [up["name"], up["cost"]], _upgrade_key.bind(ui), [])
@@ -555,6 +590,7 @@ func _build_hud_v2() -> void:
 			uvb.move_child(uicon, 0)
 			power_row.add_child(ut)
 			upg_tiles.append(ut)
+			ut.tooltip_text = "%s  ($%d, %ds)\n%s" % [up["name"], up["cost"], int(up["time"]), Data.UPGRADE_TIPS[ui]]
 
 		var bkeys: Array = ["Y", "U", "I", "O", "P", "T"]
 		var btypes: Array = [7, 8, 9, 10, 11, 12]
@@ -574,6 +610,7 @@ func _build_hud_v2() -> void:
 			build_row.add_child(bt)
 			_tile_ready(bt)
 			build_tiles.append(bt)
+			bt.tooltip_text = "%s  ($%d)\n%s" % [def["name"], def["cost"], Data.BUILD_TIPS[btypes[bi]]]
 
 	# nation panel on the right
 	var right: PanelContainer = PanelContainer.new()
@@ -628,6 +665,7 @@ func _build_hud_v2() -> void:
 
 func _update_hud(dt: float) -> void:
 	_update_ghost()
+	_tips_tick()
 	var vs: Vector2 = get_viewport().get_visible_rect().size
 	plate.position = Vector2((vs.x - plate.size.x) * 0.5, vs.y - bottom_bar.size.y - plate.size.y + 6.0)
 	fps_label.visible = Net.show_fps
@@ -1521,6 +1559,11 @@ func _show_end(title: String, final: bool) -> void:
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(sub)
 
+	if Net.challenge.get("active", false):
+		var cs: int = int(Net.challenge["stage"])
+		var cl: Label = UI.label("CHALLENGE  -  STAGE %d of %d  -  %s" % [cs + 1, Data.CHALLENGE.size(), str(Data.CHALLENGE[cs]["title"]).to_upper()], 17, UI.ACCENT)
+		cl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		v.add_child(cl)
 	var grid: GridContainer = GridContainer.new()
 	grid.columns = 5
 	grid.add_theme_constant_override("h_separation", 28)
@@ -1551,6 +1594,24 @@ func _show_end(title: String, final: bool) -> void:
 	bar.alignment = BoxContainer.ALIGNMENT_CENTER
 	bar.add_theme_constant_override("separation", 16)
 	v.add_child(bar)
+	if final and Net.challenge.get("active", false):
+		var cst: int = int(Net.challenge["stage"])
+		if title == "VICTORY":
+			Net.challenge_complete(cst)
+			if cst + 1 < Data.CHALLENGE.size():
+				var nxt: Button = Button.new()
+				nxt.text = "NEXT STAGE"
+				nxt.custom_minimum_size = Vector2(240, 50)
+				nxt.pressed.connect(_challenge_go.bind(cst + 1))
+				bar.add_child(nxt)
+			else:
+				v.add_child(UI.label("You have completed the whole Challenge!", 20, UI.ACCENT))
+		else:
+			var retry: Button = Button.new()
+			retry.text = "RETRY STAGE"
+			retry.custom_minimum_size = Vector2(240, 50)
+			retry.pressed.connect(_challenge_go.bind(cst))
+			bar.add_child(retry)
 	if not final:
 		var keep: Button = Button.new()
 		keep.text = "KEEP WATCHING"

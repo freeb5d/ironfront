@@ -27,6 +27,14 @@ var cam_speed: float = 1.0
 var zoom_speed: float = 1.0
 var always_bars: bool = false
 var low_fx: bool = false
+var tips: bool = true
+
+# single-player challenge ladder
+var challenge: Dictionary = {"active": false, "stage": 0, "nation": "USA"}
+var challenge_progress: Dictionary = {} # nation -> number of completed stages
+var challenge_autostart: bool = false
+var challenge_resume: Dictionary = {}
+var match_difficulty: int = 1
 
 # match options, chosen by the host in the lobby and synced to everyone
 var options: Dictionary = Data.DEFAULT_OPTIONS.duplicate()
@@ -105,6 +113,10 @@ func load_settings() -> void:
 	cam_speed = clampf(float(c.get_value("input", "cam_speed", cam_speed)), 0.4, 2.5)
 	zoom_speed = clampf(float(c.get_value("input", "zoom_speed", zoom_speed)), 0.4, 2.5)
 	always_bars = bool(c.get_value("game", "always_bars", always_bars))
+	tips = bool(c.get_value("game", "tips", tips))
+	var prog = c.get_value("challenge", "progress", {})
+	if prog is Dictionary:
+		challenge_progress = prog
 
 
 func save_settings() -> void:
@@ -120,7 +132,34 @@ func save_settings() -> void:
 	c.set_value("input", "cam_speed", cam_speed)
 	c.set_value("input", "zoom_speed", zoom_speed)
 	c.set_value("game", "always_bars", always_bars)
+	c.set_value("game", "tips", tips)
+	c.set_value("challenge", "progress", challenge_progress)
 	c.save("user://settings.cfg")
+
+
+## Starts stage `stage` of the challenge ladder as `nation` (offline, no lobby).
+func start_challenge(stage: int, nation: String) -> void:
+	var st: Dictionary = Data.CHALLENGE[stage]
+	my_country = nation
+	if host_game(my_name) != OK:
+		return
+	challenge = {"active": true, "stage": stage, "nation": nation}
+	for i in range(1, slots.size()):
+		slots[i]["type"] = "closed"
+		slots[i]["name"] = ""
+	for b in st["bots"]:
+		slots[b["slot"]] = {"type": "bot", "peer": 0, "name": "Bot", "country": b["country"], "team": b["team"]}
+	slots[0]["team"] = 0
+	options = Data.DEFAULT_OPTIONS.duplicate()
+	options["teams"] = "custom"
+	options["bot_money"] = st["bot_money"]
+	start_game()
+
+
+func challenge_complete(stage: int) -> void:
+	var nation: String = str(challenge["nation"])
+	challenge_progress[nation] = maxi(int(challenge_progress.get(nation, 0)), stage + 1)
+	save_settings()
 
 
 func set_volume(x: float) -> void:
@@ -157,6 +196,7 @@ func toggle_fullscreen() -> void:
 func reset() -> void:
 	slots.clear()
 	in_game = false
+	challenge["active"] = false
 
 
 func _default_slots() -> Array:
@@ -246,6 +286,9 @@ func _assign_teams() -> void:
 				slots[i]["team"] = 0 if i < 4 else 1
 			"4t":
 				slots[i]["team"] = floori(i / 2.0)
+			"custom":
+				if not slots[i].has("team"):
+					slots[i]["team"] = i
 			_:
 				slots[i]["team"] = i
 
@@ -293,6 +336,7 @@ func start_game() -> void:
 			actives += 1
 	if actives < 1:
 		return
+	match_difficulty = int(Data.CHALLENGE[int(challenge["stage"])]["difficulty"]) if challenge["active"] else difficulty
 	_assign_teams()
 	seed_value = randi()
 	in_game = true
