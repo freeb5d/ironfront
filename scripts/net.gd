@@ -20,6 +20,16 @@ var volume: float = 0.8
 var shadows: bool = false
 var edge_pan: bool = true
 var difficulty: int = 1 # bots: 0 easy, 1 normal, 2 hard
+var ui_scale: float = 1.0
+var vsync: bool = true
+var show_fps: bool = false
+var cam_speed: float = 1.0
+var zoom_speed: float = 1.0
+var always_bars: bool = false
+var low_fx: bool = false
+
+# match options, chosen by the host in the lobby and synced to everyone
+var options: Dictionary = Data.DEFAULT_OPTIONS.duplicate()
 
 var _sfx_cache: Dictionary = {}
 var _click_player: AudioStreamPlayer = null
@@ -28,6 +38,7 @@ var _click_player: AudioStreamPlayer = null
 func _ready() -> void:
 	load_settings()
 	apply_audio()
+	apply_video()
 	_click_player = AudioStreamPlayer.new()
 	_click_player.stream = sfx("click")
 	_click_player.volume_db = -8.0
@@ -87,6 +98,13 @@ func load_settings() -> void:
 	shadows = bool(c.get_value("video", "shadows", shadows))
 	edge_pan = bool(c.get_value("input", "edge_pan", edge_pan))
 	difficulty = clampi(int(c.get_value("game", "difficulty", difficulty)), 0, 2)
+	ui_scale = clampf(float(c.get_value("video", "ui_scale", ui_scale)), 0.7, 1.5)
+	vsync = bool(c.get_value("video", "vsync", vsync))
+	show_fps = bool(c.get_value("video", "show_fps", show_fps))
+	low_fx = bool(c.get_value("video", "low_fx", low_fx))
+	cam_speed = clampf(float(c.get_value("input", "cam_speed", cam_speed)), 0.4, 2.5)
+	zoom_speed = clampf(float(c.get_value("input", "zoom_speed", zoom_speed)), 0.4, 2.5)
+	always_bars = bool(c.get_value("game", "always_bars", always_bars))
 
 
 func save_settings() -> void:
@@ -95,7 +113,34 @@ func save_settings() -> void:
 	c.set_value("video", "shadows", shadows)
 	c.set_value("input", "edge_pan", edge_pan)
 	c.set_value("game", "difficulty", difficulty)
+	c.set_value("video", "ui_scale", ui_scale)
+	c.set_value("video", "vsync", vsync)
+	c.set_value("video", "show_fps", show_fps)
+	c.set_value("video", "low_fx", low_fx)
+	c.set_value("input", "cam_speed", cam_speed)
+	c.set_value("input", "zoom_speed", zoom_speed)
+	c.set_value("game", "always_bars", always_bars)
 	c.save("user://settings.cfg")
+
+
+func set_volume(x: float) -> void:
+	volume = x
+	apply_audio()
+
+
+func set_ui_scale(x: float) -> void:
+	ui_scale = x
+	apply_video()
+
+
+func set_vsync(on: bool) -> void:
+	vsync = on
+	apply_video()
+
+
+func apply_video() -> void:
+	get_window().content_scale_factor = ui_scale
+	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED if vsync else DisplayServer.VSYNC_DISABLED)
 
 
 func set_fullscreen(on: bool) -> void:
@@ -164,13 +209,14 @@ func srv_hello(pname: String, country: String) -> void:
 
 
 func _broadcast() -> void:
-	sync_slots.rpc(slots)
+	sync_slots.rpc(slots, options)
 	lobby_changed.emit()
 
 
 @rpc("authority", "reliable")
-func sync_slots(s: Array) -> void:
+func sync_slots(s: Array, o: Dictionary) -> void:
 	slots = s
+	options = o
 	lobby_changed.emit()
 
 
@@ -184,6 +230,24 @@ func _on_peer_disconnected(id: int) -> void:
 			slots[i]["type"] = "bot" if in_game else "open"
 			peer_left.emit(i)
 	_broadcast()
+
+
+func set_option(key: String, value) -> void:
+	if not multiplayer.is_server() or in_game or not Data.OPTION_DEFS.has(key):
+		return
+	options[key] = value
+	_broadcast()
+
+
+func _assign_teams() -> void:
+	for i in slots.size():
+		match str(options.get("teams", "ffa")):
+			"2t":
+				slots[i]["team"] = 0 if i < 4 else 1
+			"4t":
+				slots[i]["team"] = floori(i / 2.0)
+			_:
+				slots[i]["team"] = i
 
 
 func host_set_type(i: int, t: String) -> void:
@@ -229,15 +293,17 @@ func start_game() -> void:
 			actives += 1
 	if actives < 1:
 		return
+	_assign_teams()
 	seed_value = randi()
 	in_game = true
-	begin.rpc(slots, seed_value)
+	begin.rpc(slots, seed_value, options)
 	game_started.emit()
 
 
 @rpc("authority", "reliable")
-func begin(s: Array, sd: int) -> void:
+func begin(s: Array, sd: int, o: Dictionary) -> void:
 	slots = s
+	options = o
 	seed_value = sd
 	in_game = true
 	game_started.emit()

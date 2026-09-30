@@ -68,6 +68,31 @@ func _initialize() -> void:
 		if e.rank > 0:
 			vets += 1
 	print("veterans alive=%d" % vets)
+	# second match: 4 teams of 2, rich start, big armies, powers disabled
+	var slots2: Array = []
+	for i in Data.MAX_SLOTS:
+		slots2.append({"type": "bot", "peer": 0, "name": "Bot", "country": names[(i + 2) % names.size()], "team": floori(i / 2.0)})
+	var sim2: Sim = Sim.new()
+	sim2.setup(slots2, 7, {"teams": "4t", "money": 2000, "unit_cap": 80, "start_units": 8, "powers": false})
+	if sim2.money[0] != 2000.0 or sim2.team[3] != 1 or sim2.team_count != 4:
+		printerr("match options were not applied")
+		ok = false
+	sim2.cpoints[0] = 2.0
+	if sim2.cmd_power(0, 1, Vector3.ZERO):
+		printerr("powers should be disabled")
+		ok = false
+	for s2 in steps:
+		sim2.step(dt)
+		if sim2.status != "":
+			break
+	var left_teams: Dictionary = {}
+	for i in Data.MAX_SLOTS:
+		if sim2.alive[i]:
+			left_teams[sim2.team[i]] = true
+	print("team match: t=%.0fs teams_left=%d status='%s'" % [sim2.time, left_teams.size(), sim2.status])
+	if sim2.status != "" and left_teams.size() != 1:
+		printerr("team victory condition is wrong")
+		ok = false
 	if sim.farmed <= 0.0:
 		printerr("farmers never delivered any money")
 		ok = false

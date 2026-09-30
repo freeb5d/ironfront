@@ -84,39 +84,67 @@ static func _check(text: String, value: bool, setter: Callable, on_change: Calla
 	return c
 
 
-## Settings controls shared by the main menu and the in-game pause menu.
-static func settings_box(on_change: Callable) -> VBoxContainer:
-	var v: VBoxContainer = VBoxContainer.new()
-	v.add_theme_constant_override("separation", 10)
+static func _header(text: String) -> Label:
+	var l: Label = label(text, 16, ACCENT)
+	l.add_theme_font_override("font", spaced("bold", 3))
+	return l
 
-	var vol_row: HBoxContainer = HBoxContainer.new()
-	vol_row.add_theme_constant_override("separation", 16)
-	var vol_label: Label = label("Volume", 18)
-	vol_label.custom_minimum_size = Vector2(110, 0)
-	vol_row.add_child(vol_label)
+
+static func _slider(text: String, lo: float, hi: float, step: float, value: float, setter: Callable, on_change: Callable) -> HBoxContainer:
+	var row: HBoxContainer = HBoxContainer.new()
+	row.add_theme_constant_override("separation", 16)
+	var l: Label = label(text, 18)
+	l.custom_minimum_size = Vector2(170, 0)
+	row.add_child(l)
 	var sl: HSlider = HSlider.new()
-	sl.min_value = 0.0
-	sl.max_value = 1.0
-	sl.step = 0.05
-	sl.value = Net.volume
+	sl.min_value = lo
+	sl.max_value = hi
+	sl.step = step
+	sl.value = value
 	sl.custom_minimum_size = Vector2(240, 28)
 	sl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	sl.value_changed.connect(func(x: float):
-		Net.volume = x
-		Net.apply_audio()
+		setter.call(x)
 		Net.save_settings()
 		on_change.call())
-	vol_row.add_child(sl)
-	v.add_child(vol_row)
+	row.add_child(sl)
+	return row
 
+
+## Settings controls shared by the main menu and the in-game pause menu.
+static func settings_box(on_change: Callable) -> Control:
+	var scroll: ScrollContainer = ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(580, 400)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	var v: VBoxContainer = VBoxContainer.new()
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.add_theme_constant_override("separation", 8)
+	scroll.add_child(v)
+
+	v.add_child(_header("AUDIO"))
+	v.add_child(_slider("Volume", 0.0, 1.0, 0.05, Net.volume, Net.set_volume, on_change))
+
+	v.add_child(_header("DISPLAY"))
 	v.add_child(_check("Fullscreen", DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN, Net.set_fullscreen, on_change))
-	v.add_child(_check("Shadows (needs a stronger graphics card)", Net.shadows, func(on: bool): Net.shadows = on, on_change))
-	v.add_child(_check("Scroll the map at screen edges", Net.edge_pan, func(on: bool): Net.edge_pan = on, on_change))
+	v.add_child(_check("VSync", Net.vsync, Net.set_vsync, on_change))
+	v.add_child(_slider("Interface scale", 0.7, 1.5, 0.05, Net.ui_scale, Net.set_ui_scale, on_change))
+	v.add_child(_check("Show FPS counter", Net.show_fps, func(on: bool): Net.show_fps = on, on_change))
 
+	v.add_child(_header("PERFORMANCE"))
+	v.add_child(_check("Shadows (needs a stronger graphics card)", Net.shadows, func(on: bool): Net.shadows = on, on_change))
+	v.add_child(_check("Reduced effects (faster on weak computers)", Net.low_fx, func(on: bool): Net.low_fx = on, on_change))
+
+	v.add_child(_header("CONTROLS"))
+	v.add_child(_check("Scroll the map at screen edges", Net.edge_pan, func(on: bool): Net.edge_pan = on, on_change))
+	v.add_child(_slider("Camera speed", 0.4, 2.5, 0.1, Net.cam_speed, func(x: float): Net.cam_speed = x, on_change))
+	v.add_child(_slider("Zoom speed", 0.4, 2.5, 0.1, Net.zoom_speed, func(x: float): Net.zoom_speed = x, on_change))
+	v.add_child(_check("Always show health bars", Net.always_bars, func(on: bool): Net.always_bars = on, on_change))
+
+	v.add_child(_header("GAME"))
 	var diff_row: HBoxContainer = HBoxContainer.new()
 	diff_row.add_theme_constant_override("separation", 16)
 	var diff_label: Label = label("Bot difficulty", 18)
-	diff_label.custom_minimum_size = Vector2(110, 0)
+	diff_label.custom_minimum_size = Vector2(170, 0)
 	diff_row.add_child(diff_label)
 	var ob: OptionButton = OptionButton.new()
 	for t in ["Easy", "Normal", "Hard"]:
@@ -129,24 +157,7 @@ static func settings_box(on_change: Callable) -> VBoxContainer:
 		on_change.call())
 	diff_row.add_child(ob)
 	v.add_child(diff_row)
-	return v
-
-
-static func gradient_bg() -> TextureRect:
-	var g: Gradient = Gradient.new()
-	g.colors = PackedColorArray([BG_TOP, BG_BOTTOM])
-	g.offsets = PackedFloat32Array([0.0, 1.0])
-	var tex: GradientTexture2D = GradientTexture2D.new()
-	tex.gradient = g
-	tex.fill_from = Vector2(0, 0)
-	tex.fill_to = Vector2(0, 1)
-	tex.width = 4
-	tex.height = 256
-	var r: TextureRect = TextureRect.new()
-	r.texture = tex
-	r.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	r.stretch_mode = TextureRect.STRETCH_SCALE
-	return r
+	return scroll
 
 
 static func label(text: String, size: int = 18, color: Color = TEXT) -> Label:

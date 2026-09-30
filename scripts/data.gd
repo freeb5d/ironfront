@@ -71,6 +71,18 @@ const VISUALS := {
 }
 
 
+# Match options the host can change in the lobby (key -> label, values, display names).
+const OPTION_DEFS := {
+	"money": {"label": "Starting money", "values": [300, 500, 2000, 10000], "names": ["$300", "$500", "$2,000", "$10,000"]},
+	"speed": {"label": "Game speed", "values": [0.75, 1.0, 1.5, 2.0], "names": ["Slow", "Normal", "Fast", "Very fast"]},
+	"unit_cap": {"label": "Unit limit", "values": [20, 40, 80], "names": ["20", "40", "80"]},
+	"start_units": {"label": "Starting army", "values": [2, 4, 8], "names": ["Small", "Normal", "Large"]},
+	"teams": {"label": "Teams", "values": ["ffa", "2t", "4t"], "names": ["Free for all", "2 teams of 4", "4 teams of 2"]},
+	"powers": {"label": "Commander powers", "values": [true, false], "names": ["On", "Off"]},
+}
+const DEFAULT_OPTIONS := {"money": 500, "speed": 1.0, "unit_cap": 40, "start_units": 4, "teams": "ffa", "powers": true}
+
+
 static func country_names() -> Array:
 	return COUNTRIES.keys()
 

@@ -28,6 +28,7 @@ var rstart: Vector2 = Vector2.ZERO
 var ground_tex: ImageTexture = null
 var msg_label: RichTextLabel
 var plate: PanelContainer
+var fps_label: Label
 var bottom_bar: PanelContainer
 var info_label: RichTextLabel
 var unit_bar: ProgressBar
@@ -77,7 +78,7 @@ func _ready() -> void:
 	if multiplayer.is_server():
 		sim = Sim.new()
 		sim.difficulty = Net.difficulty
-		sim.setup(Net.slots, Net.seed_value)
+		sim.setup(Net.slots, Net.seed_value, Net.options)
 		Net.peer_left.connect(_on_peer_left)
 		ready_peers[1] = true
 		started_at = Time.get_ticks_msec() / 1000.0
@@ -426,6 +427,9 @@ func _build_hud_v2() -> void:
 	msg_label.position = Vector2(16, 12)
 	root.add_child(msg_label)
 
+	fps_label = UI.label("", 16, Color(0.6, 1.0, 0.6))
+	root.add_child(fps_label)
+
 	# players list, top-right
 	var pl: PanelContainer = _panel(root)
 	pl.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
@@ -530,7 +534,7 @@ func _build_hud_v2() -> void:
 	unit_bar = ProgressBar.new()
 	unit_bar.fill_mode = ProgressBar.FILL_BOTTOM_TO_TOP
 	unit_bar.show_percentage = false
-	unit_bar.max_value = Data.UNIT_CAP
+	unit_bar.max_value = int(Net.options.get("unit_cap", Data.UNIT_CAP))
 	unit_bar.custom_minimum_size = Vector2(22, 120)
 	rh.add_child(unit_bar)
 
@@ -562,6 +566,9 @@ func _build_hud_v2() -> void:
 func _update_hud(dt: float) -> void:
 	var vs: Vector2 = get_viewport().get_visible_rect().size
 	plate.position = Vector2((vs.x - plate.size.x) * 0.5, vs.y - bottom_bar.size.y - plate.size.y + 6.0)
+	fps_label.visible = Net.show_fps
+	fps_label.text = "%d FPS" % Engine.get_frames_per_second()
+	fps_label.position = Vector2(vs.x * 0.5 - 30.0, 8.0)
 	# event messages fade out
 	var text: String = ""
 	var i: int = msgs.size() - 1
@@ -615,7 +622,7 @@ func _update_hud(dt: float) -> void:
 			units += 1
 		elif k == 1 or k == 2:
 			units += 1
-	info_label.text = "Units  %d / %d\nFarmers  %d\n[color=#e3b341]Oil derricks  %d[/color]\n[color=#7dd3fc]Commander points  %s[/color]" % [units, Data.UNIT_CAP, farmers, oil, cp_text]
+	info_label.text = "Units  %d / %d\nFarmers  %d\n[color=#e3b341]Oil derricks  %d[/color]\n[color=#7dd3fc]Commander points  %s[/color]" % [units, int(Net.options.get("unit_cap", Data.UNIT_CAP)), farmers, oil, cp_text]
 	unit_bar.value = units
 
 
@@ -733,7 +740,10 @@ func _process(dt: float) -> void:
 			var n: String = str(sl["name"]) if str(sl["name"]) != "" else "Bot"
 			var dead: bool = i < alive_arr.size() and not alive_arr[i]
 			var col: String = Data.PLAYER_COLORS[i].to_html(false)
-			var line: String = "[color=#%s]■[/color] %s  [color=#8b98a9]%s[/color]  [color=#e3b341]oil %d[/color]" % [col, n, sl["country"], int(oil_count.get(i, 0))]
+			var tag: String = ""
+			if str(Net.options.get("teams", "ffa")) != "ffa":
+				tag = " (%s)" % char(65 + int(sl.get("team", i)))
+			var line: String = "[color=#%s]■[/color] %s%s  [color=#8b98a9]%s[/color]  [color=#e3b341]oil %d[/color]" % [col, n, tag, sl["country"], int(oil_count.get(i, 0))]
 			if dead:
 				line = "[s][color=#6b7280]%s  %s[/color][/s]  [color=#ff7b72]OUT[/color]" % [n, sl["country"]]
 			lines.append(line)
@@ -769,7 +779,7 @@ func _process(dt: float) -> void:
 func _physics_process(dt: float) -> void:
 	if sim == null or not running:
 		return
-	sim.step(dt)
+	sim.step(dt * float(Net.options.get("speed", 1.0)))
 	snap_timer += dt
 	if snap_timer >= 1.0 / SNAP_HZ:
 		snap_timer = 0.0
@@ -1153,7 +1163,7 @@ func _scatter_props() -> void:
 	var rocks: Array = ["res://assets/props/rocks-high.glb", "res://assets/props/rocks-low.glb", "res://assets/props/stones.glb"]
 	var placed: int = 0
 	var attempts: int = 0
-	while placed < 100 and attempts < 800:
+	while placed < (50 if Net.low_fx else 100) and attempts < 800:
 		attempts += 1
 		var a: float = r.randf() * TAU
 		var rad: float = r.randf_range(30.0, 150.0)
@@ -1203,12 +1213,12 @@ func _update_hp(id: int, _kind: int, frac: float) -> void:
 	if _kind == 4:
 		bar.visible = frac > 0.07 # capture progress
 	else:
-		bar.visible = frac < 0.999
+		bar.visible = frac < 0.999 or Net.always_bars
 	bar.scale.x = maxf(frac, 0.01)
 
 
 func _play3d(kind: String, pos: Vector3, vol: float = 0.0) -> void:
-	if get_tree().get_nodes_in_group("sfx").size() > 28:
+	if get_tree().get_nodes_in_group("sfx").size() > (14 if Net.low_fx else 28):
 		return
 	var p: AudioStreamPlayer3D = AudioStreamPlayer3D.new()
 	p.add_to_group("sfx")
@@ -1476,7 +1486,7 @@ func _spawn_shot(shooter: int, from: Vector3, to: Vector3, kind: int) -> void:
 		v.set_meta("shoot_t", 0.5)
 	if dv.length() >= 0.5:
 		_play3d("cannon" if kind == 2 else "shot", from, -2.0 if kind == 2 else -9.0)
-	if projectiles.size() >= 60 or dv.length() < 0.5:
+	if projectiles.size() >= (30 if Net.low_fx else 60) or dv.length() < 0.5:
 		return
 	var heavy: bool = kind == 2
 	var a: Vector3 = Vector3(from.x, 2.3 if heavy else 1.5, from.z)
@@ -1494,7 +1504,7 @@ func _spawn_shot(shooter: int, from: Vector3, to: Vector3, kind: int) -> void:
 
 
 func _burst(pos: Vector3, amount: int, life: float, size: float, col: Color, vel: float, grav: Vector3) -> void:
-	if get_tree().get_nodes_in_group("fx").size() > 50:
+	if get_tree().get_nodes_in_group("fx").size() > (25 if Net.low_fx else 50):
 		return
 	var ps: CPUParticles3D = CPUParticles3D.new()
 	ps.add_to_group("fx")
@@ -1563,7 +1573,7 @@ func _pan_camera(dt: float) -> void:
 			dir.y -= 1.0
 		if m.y >= sz.y - 4.0:
 			dir.y += 1.0
-	cam_pivot.position += Vector3(dir.x, 0, dir.y) * zoom * 1.2 * dt
+	cam_pivot.position += Vector3(dir.x, 0, dir.y) * zoom * 1.2 * dt * Net.cam_speed
 	cam_pivot.position.x = clampf(cam_pivot.position.x, -150.0, 150.0)
 	cam_pivot.position.z = clampf(cam_pivot.position.z, -150.0, 150.0)
 
@@ -1603,10 +1613,10 @@ func _unhandled_input(ev: InputEvent) -> void:
 				else:
 					_right_click(ev.position)
 		elif ev.button_index == MOUSE_BUTTON_WHEEL_UP and ev.pressed:
-			zoom = clampf(zoom - 6.0, 20.0, 140.0)
+			zoom = clampf(zoom - 6.0 * Net.zoom_speed, 20.0, 140.0)
 			_update_cam()
 		elif ev.button_index == MOUSE_BUTTON_WHEEL_DOWN and ev.pressed:
-			zoom = clampf(zoom + 6.0, 20.0, 140.0)
+			zoom = clampf(zoom + 6.0 * Net.zoom_speed, 20.0, 140.0)
 			_update_cam()
 	elif ev is InputEventKey and ev.pressed and not ev.echo:
 		if ev.keycode == KEY_Q:
@@ -1640,6 +1650,12 @@ func _unhandled_input(ev: InputEvent) -> void:
 				Input.set_default_cursor_shape(Input.CURSOR_ARROW)
 			else:
 				pause_layer.visible = not pause_layer.visible
+
+
+func _is_enemy(owner: int) -> bool:
+	if owner < 0 or my_slot < 0 or owner >= Net.slots.size():
+		return false
+	return int(Net.slots[owner].get("team", owner)) != int(Net.slots[my_slot].get("team", my_slot))
 
 
 func _is_unit(k: int) -> bool:
@@ -1723,7 +1739,7 @@ func _right_click(sp: Vector2) -> void:
 		elif k == 4:
 			if d < 7.0:
 				oil = true
-		elif info[id][1] != my_slot:
+		elif _is_enemy(info[id][1]):
 			var reach: float = 8.0 if k == 0 else 2.5
 			if d < reach and d < best_d:
 				best_d = d

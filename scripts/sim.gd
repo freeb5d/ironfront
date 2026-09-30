@@ -60,6 +60,10 @@ var kills: Array = []
 var lost: Array = []
 var earned: Array = []
 var cpoints: Array = []   # commander points per slot
+var team: Array = []      # team id per slot (free for all = own slot)
+var unit_cap: int = Data.UNIT_CAP
+var powers_on: bool = true
+var team_count: int = 0
 var power_cd: Array = []  # per slot: cooldown seconds for each of the 3 powers
 var strikes: Array = []   # pending strike powers: {t, pos, slot}
 var fx: PackedFloat32Array = PackedFloat32Array() # visual events for clients: type, x, z
@@ -67,15 +71,20 @@ var rand: RandomNumberGenerator = RandomNumberGenerator.new()
 var _next_id: int = 1
 
 
-func setup(p_slots: Array, seed_value: int) -> void:
+func setup(p_slots: Array, seed_value: int, opts: Dictionary = {}) -> void:
 	rand.seed = seed_value
 	slots = p_slots.duplicate(true)
+	unit_cap = int(opts.get("unit_cap", Data.UNIT_CAP))
+	powers_on = bool(opts.get("powers", true))
+	var start_money: float = float(opts.get("money", Data.START_MONEY))
+	var start_units: int = int(opts.get("start_units", 4))
 	_spawn_map()
 	for i in Data.MAX_SLOTS:
 		var t: String = slots[i]["type"]
 		var active: bool = (t == "human" or t == "bot")
 		alive.append(active)
-		money.append(Data.START_MONEY if active else 0.0)
+		money.append(start_money if active else 0.0)
+		team.append(int(slots[i].get("team", i)))
 		bot_timer.append(rand.randf_range(1.0, 4.0))
 		hq_pos.append(Data.slot_pos(i))
 		hq_ids.append(-1)
@@ -87,10 +96,27 @@ func setup(p_slots: Array, seed_value: int) -> void:
 		if active:
 			active_count += 1
 			_spawn_hq(i)
-			for k in 4:
+			for k in start_units:
 				spawn_unit(i, 0)
 			for k in 2:
 				spawn_unit(i, 2)
+	team_count = _count_teams()
+
+
+func same_team(a: int, b: int) -> bool:
+	if a == b:
+		return true
+	if a < 0 or b < 0:
+		return false
+	return team[a] == team[b]
+
+
+func _count_teams() -> int:
+	var seen: Dictionary = {}
+	for i in Data.MAX_SLOTS:
+		if alive[i]:
+			seen[team[i]] = true
+	return seen.size()
 
 
 func label(slot: int) -> String:
@@ -192,7 +218,7 @@ func cmd_move(slot: int, ids: Array, pos: Vector3, attack_move: bool) -> void:
 
 func cmd_attack(slot: int, ids: Array, target_id: int) -> void:
 	var t = ents.get(target_id)
-	if t == null or t.owner == slot or t.kind >= 4:
+	if t == null or same_team(t.owner, slot) or t.kind >= 4:
 		return
 	for id in ids:
 		var e = ents.get(id)
@@ -243,7 +269,7 @@ const STRIKE_DAMAGE := 140.0
 
 ## Commander powers (cost 1 commander point each): 0 targeted strike, 1 reinforcements, 2 field repair.
 func cmd_power(slot: int, idx: int, pos: Vector3) -> bool:
-	if status != "" or slot < 0 or slot >= alive.size() or not alive[slot] or idx < 0 or idx > 2:
+	if not powers_on or status != "" or slot < 0 or slot >= alive.size() or not alive[slot] or idx < 0 or idx > 2:
 		return false
 	if cpoints[slot] < 1.0 or power_cd[slot][idx] > 0.0:
 		return false
@@ -280,7 +306,7 @@ func _update_powers(dt: float) -> void:
 			fx.append(pos.x)
 			fx.append(pos.z)
 			for e in ents.values():
-				if e.owner != s["slot"] and e.kind <= 3 and e.hp > 0.0 and _flat(e.pos, pos) < STRIKE_RADIUS + e.radius * 0.5:
+				if not same_team(e.owner, s["slot"]) and e.kind <= 3 and e.hp > 0.0 and _flat(e.pos, pos) < STRIKE_RADIUS + e.radius * 0.5:
 					_hit(s["slot"], null, e, STRIKE_DAMAGE * (0.5 if e.kind == 0 else 1.0))
 			strikes.remove_at(si)
 		si -= 1
@@ -293,7 +319,7 @@ func cmd_train(slot: int, idx: int) -> bool:
 		return false
 	var st: Dictionary = Data.unit(slots[slot]["country"], idx)
 	var cost: float = float(st["cost"])
-	if money[slot] < cost or unit_count(slot) >= Data.UNIT_CAP:
+	if money[slot] < cost or unit_count(slot) >= unit_cap:
 		return false
 	money[slot] -= cost
 	spawn_unit(slot, idx)
@@ -340,7 +366,7 @@ func _find_enemy(e: Ent) -> int:
 	var best: int = -1
 	var best_d: float = SIGHT
 	for o in ents.values():
-		if o.owner == e.owner or o.hp <= 0.0 or o.kind >= 4:
+		if o.kind >= 4 or o.hp <= 0.0 or same_team(o.owner, e.owner):
 			continue
 		var d: float = _flat(e.pos, o.pos) - o.radius
 		if d < best_d:
@@ -489,15 +515,16 @@ func _update_oil(dt: float) -> void:
 	for o in ents.values():
 		if o.kind != 4:
 			continue
-		var present: Dictionary = {}
+		var present: Dictionary = {} # team -> first slot seen
 		for u in ents.values():
 			if (u.kind == 1 or u.kind == 2) and _flat(u.pos, o.pos) < OIL_RADIUS:
-				present[u.owner] = true
+				if not present.has(team[u.owner]):
+					present[team[u.owner]] = u.owner
 		var who: Array = present.keys()
-		if who.size() == 1 and who[0] != o.owner:
+		if who.size() == 1 and (o.owner < 0 or team[o.owner] != who[0]):
 			o.cap_t += dt
 			if o.cap_t >= OIL_CAPTURE_TIME:
-				o.owner = who[0]
+				o.owner = present[who[0]]
 				o.cap_t = 0.0
 		else:
 			o.cap_t = maxf(0.0, o.cap_t - dt)
@@ -580,14 +607,19 @@ func _reap() -> void:
 
 
 func _check_victory() -> void:
-	if status != "" or active_count < 2:
+	if status != "" or team_count < 2:
 		return
 	var left: Array = []
+	var teams_left: Dictionary = {}
 	for i in Data.MAX_SLOTS:
 		if alive[i]:
 			left.append(i)
-	if left.size() == 1:
-		status = "WINNER: " + label(left[0])
+			teams_left[team[i]] = true
+	if teams_left.size() == 1:
+		var names: Array = []
+		for i in left:
+			names.append(label(i))
+		status = "WINNER: " + ", ".join(names)
 	elif left.size() == 0:
 		status = "DRAW"
 
@@ -596,7 +628,7 @@ func _nearest_enemy_hq(slot: int) -> Vector3:
 	var best: Vector3 = Vector3.INF
 	var best_d: float = INF
 	for e in ents.values():
-		if e.kind == 0 and e.owner != slot:
+		if e.kind == 0 and not same_team(e.owner, slot):
 			var d: float = _flat(hq_pos[slot], e.pos)
 			if d < best_d:
 				best_d = d
@@ -608,7 +640,7 @@ func _nearest_oil(slot: int) -> Vector3:
 	var best: Vector3 = Vector3.INF
 	var best_d: float = INF
 	for e in ents.values():
-		if e.kind == 4 and e.owner != slot:
+		if e.kind == 4 and (e.owner < 0 or not same_team(e.owner, slot)):
 			var d: float = _flat(hq_pos[slot], e.pos)
 			if d < best_d:
 				best_d = d

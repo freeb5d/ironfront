@@ -22,6 +22,7 @@ var orbit: float = 0.3
 var overlay_left: TextureRect
 var overlay_full: ColorRect
 var pending_portraits: Array = []
+var opt_controls: Dictionary = {}
 
 
 func _ready() -> void:
@@ -381,7 +382,6 @@ func _confirm() -> void:
 			for i in range(1, Data.MAX_SLOTS):
 				Net.host_set_type(i, "bot")
 				Net.set_country(i, names[randi() % names.size()])
-			Net.start_game()
 		HOST:
 			if Net.host_game(_pname()) != OK:
 				_show("main")
@@ -430,7 +430,36 @@ func _build_lobby() -> void:
 	rows = VBoxContainer.new()
 	rows.add_theme_constant_override("separation", 6)
 	panel.add_child(rows)
-	v.add_child(panel)
+	var hb: HBoxContainer = HBoxContainer.new()
+	hb.add_theme_constant_override("separation", 14)
+	v.add_child(hb)
+	hb.add_child(panel)
+	var opt_panel: PanelContainer = PanelContainer.new()
+	var ov: VBoxContainer = VBoxContainer.new()
+	ov.add_theme_constant_override("separation", 2)
+	opt_panel.add_child(ov)
+	hb.add_child(opt_panel)
+	ov.add_child(UI.label("MATCH OPTIONS", 16, UI.ACCENT))
+	for key in Data.OPTION_DEFS.keys():
+		var def: Dictionary = Data.OPTION_DEFS[key]
+		ov.add_child(UI.label(str(def["label"]), 15, Color("8b98a9")))
+		var ob: OptionButton = OptionButton.new()
+		ob.custom_minimum_size = Vector2(230, 0)
+		for nm in def["names"]:
+			ob.add_item(str(nm))
+		ob.item_selected.connect(_on_option.bind(key))
+		ov.add_child(ob)
+		opt_controls[key] = ob
+	ov.add_child(UI.label("Bot difficulty", 15, Color("8b98a9")))
+	var dob: OptionButton = OptionButton.new()
+	dob.custom_minimum_size = Vector2(230, 0)
+	for nm in ["Easy", "Normal", "Hard"]:
+		dob.add_item(nm)
+	dob.item_selected.connect(func(idx: int):
+		Net.difficulty = idx
+		Net.save_settings())
+	ov.add_child(dob)
+	opt_controls["difficulty"] = dob
 	wait_label = _center(UI.label("Waiting for the host to start the game...", 18, UI.ACCENT))
 	v.add_child(wait_label)
 	var bar: HBoxContainer = HBoxContainer.new()
@@ -440,6 +469,10 @@ func _build_lobby() -> void:
 	start_btn = _btn("START GAME", Net.start_game, 260.0)
 	bar.add_child(start_btn)
 	v.add_child(bar)
+
+
+func _on_option(idx: int, key: String) -> void:
+	Net.set_option(key, Data.OPTION_DEFS[key]["values"][idx])
 
 
 func _leave_lobby() -> void:
@@ -459,6 +492,15 @@ func _refresh() -> void:
 		return
 	_show("lobby")
 	start_btn.visible = multiplayer.is_server()
+	for key in opt_controls:
+		var ob2: OptionButton = opt_controls[key]
+		if key == "difficulty":
+			ob2.selected = Net.difficulty
+		else:
+			var at: int = Data.OPTION_DEFS[key]["values"].find(Net.options.get(key))
+			if at >= 0:
+				ob2.selected = at
+		ob2.disabled = not multiplayer.is_server()
 	wait_label.visible = not multiplayer.is_server()
 	lobby_info.text = "Friends join with your address: " + ", ".join(_local_ips()) + "  (UDP %d)" % Net.PORT if multiplayer.is_server() else "Connected. Pick your nation below."
 	for c in rows.get_children():
