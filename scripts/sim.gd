@@ -36,6 +36,12 @@ class Ent:
 	var timer: float = 0.0
 	# oil derricks
 	var cap_t: float = 0.0
+	# veterancy
+	var xp: float = 0.0
+	var rank: int = 0 # 0 rookie, 1 veteran, 2 elite, 3 heroic
+	var value: float = 0.0
+	var base_hp: float = 1.0
+	var base_dmg: float = 0.0
 
 var ents: Dictionary = {}
 var slots: Array = []
@@ -53,6 +59,10 @@ var difficulty: int = 1 # bots: 0 easy, 1 normal, 2 hard
 var kills: Array = []
 var lost: Array = []
 var earned: Array = []
+var cpoints: Array = []   # commander points per slot
+var power_cd: Array = []  # per slot: cooldown seconds for each of the 3 powers
+var strikes: Array = []   # pending strike powers: {t, pos, slot}
+var fx: PackedFloat32Array = PackedFloat32Array() # visual events for clients: type, x, z
 var rand: RandomNumberGenerator = RandomNumberGenerator.new()
 var _next_id: int = 1
 
@@ -72,6 +82,8 @@ func setup(p_slots: Array, seed_value: int) -> void:
 		kills.append(0)
 		lost.append(0)
 		earned.append(0.0)
+		cpoints.append(1.0 if active else 0.0)
+		power_cd.append([0.0, 0.0, 0.0])
 		if active:
 			active_count += 1
 			_spawn_hq(i)
@@ -125,6 +137,7 @@ func _spawn_hq(slot: int) -> void:
 	e.pos = hq_pos[slot]
 	e.hp = HQ_HP
 	e.max_hp = HQ_HP
+	e.value = 600.0
 	e.radius = 7.5
 	ents[e.id] = e
 	hq_ids[slot] = e.id
@@ -146,6 +159,9 @@ func spawn_unit(slot: int, idx: int) -> Ent:
 	e.rng = float(st["rng"])
 	e.spd = float(st["spd"])
 	e.cd = float(st["cd"])
+	e.base_hp = e.hp
+	e.base_dmg = e.dmg
+	e.value = float(st["cost"])
 	e.radius = 3.0 if idx == 1 else 1.6
 	ents[e.id] = e
 	return e
@@ -213,7 +229,61 @@ func stats() -> Array:
 	var earned_i: Array = []
 	for v in earned:
 		earned_i.append(int(v))
-	return [kills, lost, earned_i]
+	var cp: Array = []
+	for v in cpoints:
+		cp.append(snappedf(v, 0.1))
+	return [kills, lost, earned_i, cp, power_cd]
+
+
+const POWER_COOLDOWN := [45.0, 60.0, 60.0]
+const STRIKE_DELAY := 2.5
+const STRIKE_RADIUS := 16.0
+const STRIKE_DAMAGE := 140.0
+
+
+## Commander powers (cost 1 commander point each): 0 targeted strike, 1 reinforcements, 2 field repair.
+func cmd_power(slot: int, idx: int, pos: Vector3) -> bool:
+	if status != "" or slot < 0 or slot >= alive.size() or not alive[slot] or idx < 0 or idx > 2:
+		return false
+	if cpoints[slot] < 1.0 or power_cd[slot][idx] > 0.0:
+		return false
+	match idx:
+		0:
+			var p: Vector3 = Vector3(clampf(pos.x, -150.0, 150.0), 0.0, clampf(pos.z, -150.0, 150.0))
+			strikes.append({"t": STRIKE_DELAY, "pos": p, "slot": slot})
+			fx.append(1.0)
+			fx.append(p.x)
+			fx.append(p.z)
+		1:
+			for k in 4:
+				spawn_unit(slot, 0)
+		2:
+			for e in ents.values():
+				if e.owner == slot and e.kind >= 1 and e.kind <= 3:
+					e.hp = minf(e.max_hp, e.hp + e.max_hp * 0.6)
+	cpoints[slot] -= 1.0
+	power_cd[slot][idx] = POWER_COOLDOWN[idx]
+	return true
+
+
+func _update_powers(dt: float) -> void:
+	for i in Data.MAX_SLOTS:
+		for k in 3:
+			power_cd[i][k] = maxf(0.0, power_cd[i][k] - dt)
+	var si: int = strikes.size() - 1
+	while si >= 0:
+		var s: Dictionary = strikes[si]
+		s["t"] -= dt
+		if s["t"] <= 0.0:
+			var pos: Vector3 = s["pos"]
+			fx.append(2.0)
+			fx.append(pos.x)
+			fx.append(pos.z)
+			for e in ents.values():
+				if e.owner != s["slot"] and e.kind <= 3 and e.hp > 0.0 and _flat(e.pos, pos) < STRIKE_RADIUS + e.radius * 0.5:
+					_hit(s["slot"], null, e, STRIKE_DAMAGE * (0.5 if e.kind == 0 else 1.0))
+			strikes.remove_at(si)
+		si -= 1
 
 
 func cmd_train(slot: int, idx: int) -> bool:
@@ -247,6 +317,7 @@ func step(dt: float) -> void:
 		elif e.kind == 3:
 			_tick_farmer(e, dt)
 	_update_oil(dt)
+	_update_powers(dt)
 	_separate()
 	_reap()
 	_check_victory()
@@ -278,9 +349,42 @@ func _find_enemy(e: Ent) -> int:
 	return best
 
 
+## One place where damage is dealt, so kills, experience and commander points stay consistent.
+func _hit(slot: int, attacker, t: Ent, dmg: float) -> void:
+	var was_alive: bool = t.hp > 0.0
+	t.hp -= dmg
+	if was_alive and t.hp <= 0.0:
+		kills[slot] += 1
+		cpoints[slot] += t.value / 400.0
+		if attacker != null:
+			_gain_xp(attacker, t.value)
+
+
+func _gain_xp(e: Ent, v: float) -> void:
+	e.xp += v
+	var r: int = 0
+	if e.xp >= 900.0:
+		r = 3
+	elif e.xp >= 400.0:
+		r = 2
+	elif e.xp >= 150.0:
+		r = 1
+	if r > e.rank:
+		var old_max: float = e.max_hp
+		e.rank = r
+		e.max_hp = e.base_hp * [1.0, 1.1, 1.2, 1.3][r]
+		e.hp += e.max_hp - old_max
+		e.dmg = e.base_dmg * [1.0, 1.15, 1.3, 1.5][r]
+		fx.append(3.0)
+		fx.append(e.pos.x)
+		fx.append(e.pos.z)
+
+
 func _tick_unit(e: Ent, dt: float) -> void:
 	e.cd_left -= dt
 	e.scan -= dt
+	if e.rank == 3:
+		e.hp = minf(e.max_hp, e.hp + 2.0 * dt) # heroic units slowly repair themselves
 	var t = null
 	if e.target != -1:
 		t = ents.get(e.target)
@@ -297,10 +401,7 @@ func _tick_unit(e: Ent, dt: float) -> void:
 		if dist <= e.rng:
 			if e.cd_left <= 0.0:
 				e.cd_left = e.cd
-				var was_alive: bool = t.hp > 0.0
-				t.hp -= e.dmg
-				if was_alive and t.hp <= 0.0:
-					kills[e.owner] += 1
+				_hit(e.owner, e, t, e.dmg)
 				if shots.size() < MAX_SHOTS * 6:
 					shots.append(e.id)
 					shots.append(e.pos.x)
@@ -559,6 +660,7 @@ func snapshot() -> PackedFloat32Array:
 		out.append(e.pos.x)
 		out.append(e.pos.z)
 		out.append(e.hp / e.max_hp)
+		out.append(e.rank)
 	return out
 
 

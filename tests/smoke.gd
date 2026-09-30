@@ -18,7 +18,7 @@ func _initialize() -> void:
 	sim.setup(slots, 12345)
 
 	var ok: bool = true
-	for path in ["res://scripts/net.gd", "res://scripts/ui.gd", "res://scripts/minimap.gd", "res://scripts/menu.gd", "res://scripts/game.gd", "res://scripts/sfx.gd", "res://scripts/models.gd", "res://scripts/portrait.gd", "res://scripts/turntable.gd"]:
+	for path in ["res://scripts/net.gd", "res://scripts/ui.gd", "res://scripts/minimap.gd", "res://scripts/menu.gd", "res://scripts/game.gd", "res://scripts/sfx.gd", "res://scripts/models.gd", "res://scripts/portrait.gd", "res://scripts/turntable.gd", "res://scripts/power_icon.gd"]:
 		var sc = load(path)
 		if sc == null or not sc.can_instantiate():
 			printerr("script failed to compile: " + path)
@@ -34,6 +34,15 @@ func _initialize() -> void:
 		printerr("cmd_train failed")
 		ok = false
 
+	# commander powers must work and respect cost
+	sim.cpoints[0] = 3.0
+	if not sim.cmd_power(0, 1, Vector3.ZERO) or not sim.cmd_power(0, 2, Vector3.ZERO) or not sim.cmd_power(0, 0, Vector3(0, 0, 0)):
+		printerr("commander powers failed")
+		ok = false
+	if sim.cmd_power(0, 1, Vector3.ZERO):
+		printerr("power ignored its cooldown")
+		ok = false
+
 	var dt: float = 1.0 / 30.0
 	var steps: int = 30 * 60 * 8
 	for s in steps:
@@ -42,7 +51,7 @@ func _initialize() -> void:
 			break
 
 	var snap: PackedFloat32Array = sim.snapshot()
-	if snap.size() != sim.ents.size() * 6:
+	if snap.size() != sim.ents.size() * 7:
 		printerr("snapshot size mismatch")
 		ok = false
 	var survivors: int = 0
@@ -54,6 +63,11 @@ func _initialize() -> void:
 		if e.kind == 4 and e.owner >= 0:
 			oil_owned += 1
 	print("t=%.0fs entities=%d survivors=%d farmed=%d oil_owned=%d status='%s'" % [sim.time, sim.ents.size(), survivors, int(sim.farmed), oil_owned, sim.status])
+	var vets: int = 0
+	for e in sim.ents.values():
+		if e.rank > 0:
+			vets += 1
+	print("veterans alive=%d" % vets)
 	if sim.farmed <= 0.0:
 		printerr("farmers never delivered any money")
 		ok = false

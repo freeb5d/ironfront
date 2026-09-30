@@ -45,6 +45,8 @@ var last_click_kind: int = -1
 var end_layer: CanvasLayer = null
 var final_shown: bool = false
 var elim_shown: bool = false
+var targeting: int = -1      # power waiting for a map click, -1 = none
+var power_tiles: Array = []
 
 var cam_pivot: Node3D
 var cam: Camera3D
@@ -127,6 +129,13 @@ func _autotest_finish() -> void:
 	_group_key(1, false)
 	_center_on_hq()
 	_stop_selected()
+	_handle_fx(PackedFloat32Array([1.0, keep_pivot.x + 12.0, keep_pivot.z + 4.0, 2.0, keep_pivot.x + 12.0, keep_pivot.z + 4.0, 3.0, keep_pivot.x, keep_pivot.z]))
+	if any_id != -1:
+		_update_rank(any_id, 2)
+	_cast_power(1, Vector3.ZERO)
+	_cast_power(0, keep_pivot + Vector3(30, 0, 0))
+	await get_tree().create_timer(0.4).timeout
+	await Net.shot("16_powers")
 	# simulate a click-drag pan
 	drag_start = Vector2(400, 300)
 	pan_anchor = _ground_point(drag_start)
@@ -364,6 +373,8 @@ func _tile(text: String, cb: Callable, entries: Array = []) -> Button:
 		var l: Label = UI.label(parts[i], 16 if i == 0 else 14, UI.TEXT if i == 0 else Color("b9c6d6"))
 		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		vb.add_child(l)
+		if i == 1:
+			b.set_meta("sub", l)
 	return b
 
 
@@ -482,7 +493,18 @@ func _build_hud_v2() -> void:
 		var t_farm: Button = _tile("Select farmers\n[G]", _select_kinds.bind([3]), [[Data.FARMER_VISUAL[0], true, 3.2]])
 		grid.add_child(t_farm)
 		_tile_ready(t_farm)
-		used += 2
+		grid.add_child(_empty_tile())
+		var pnames: Array = Data.COUNTRIES[country]["powers"]
+		for pi in 3:
+			var pt: Button = _tile("%s\n1 pt  [%s]" % [pnames[pi], ["Z", "C", "V"][pi]], _power_key.bind(pi), [])
+			var icon: PowerIcon = PowerIcon.new()
+			icon.kind = pi
+			var pvb: Node = pt.get_child(0)
+			pvb.add_child(icon)
+			pvb.move_child(icon, 0)
+			grid.add_child(pt)
+			power_tiles.append(pt)
+		used += 6
 	for k in range(used, 12):
 		grid.add_child(_empty_tile())
 
@@ -568,6 +590,20 @@ func _update_hud(dt: float) -> void:
 	var units: int = 0
 	var farmers: int = 0
 	var oil: int = 0
+	var cp_text: String = "0"
+	if stats.size() >= 5 and my_slot >= 0 and my_slot < stats[3].size():
+		var cpv: float = float(stats[3][my_slot])
+		cp_text = "%.1f" % cpv
+		for pi in power_tiles.size():
+			var cd: float = float(stats[4][my_slot][pi])
+			var sub: Label = power_tiles[pi].get_meta("sub")
+			if cd > 0.0:
+				sub.text = "ready in %ds" % ceili(cd)
+			elif cpv < 1.0:
+				sub.text = "needs 1 pt"
+			else:
+				sub.text = "1 pt  [%s]" % ["Z", "C", "V"][pi]
+			power_tiles[pi].modulate = Color(1, 1, 1, 1.0 if (cd <= 0.0 and cpv >= 1.0) else 0.55)
 	for id in info:
 		var k: int = info[id][0]
 		if info[id][1] != my_slot:
@@ -579,7 +615,7 @@ func _update_hud(dt: float) -> void:
 			units += 1
 		elif k == 1 or k == 2:
 			units += 1
-	info_label.text = "Units  %d / %d\nFarmers  %d\n[color=#e3b341]Oil derricks  %d[/color]" % [units, Data.UNIT_CAP, farmers, oil]
+	info_label.text = "Units  %d / %d\nFarmers  %d\n[color=#e3b341]Oil derricks  %d[/color]\n[color=#7dd3fc]Commander points  %s[/color]" % [units, Data.UNIT_CAP, farmers, oil, cp_text]
 	unit_bar.value = units
 
 
@@ -742,12 +778,14 @@ func _physics_process(dt: float) -> void:
 		sim.shots = PackedFloat32Array()
 		var mp: PackedFloat32Array = sim.money_packed()
 		var st: Array = sim.stats()
-		on_snapshot.rpc(snap, shots, mp, sim.alive, sim.status, st)
-		on_snapshot(snap, shots, mp, sim.alive, sim.status, st)
+		var fxp: PackedFloat32Array = sim.fx
+		sim.fx = PackedFloat32Array()
+		on_snapshot.rpc(snap, shots, mp, sim.alive, sim.status, st, fxp)
+		on_snapshot(snap, shots, mp, sim.alive, sim.status, st, fxp)
 
 
 @rpc("authority", "unreliable_ordered")
-func on_snapshot(snap: PackedFloat32Array, shots: PackedFloat32Array, money_p: PackedFloat32Array, alive_p: Array, status: String, stats_p: Array) -> void:
+func on_snapshot(snap: PackedFloat32Array, shots: PackedFloat32Array, money_p: PackedFloat32Array, alive_p: Array, status: String, stats_p: Array, fx_p: PackedFloat32Array) -> void:
 	var now_s: float = Time.get_ticks_msec() / 1000.0
 	if my_slot >= 0 and my_slot < money_p.size() and my_slot < money.size():
 		if money_p[my_slot] - money[my_slot] >= 30.0 and now_s - last_coin > 0.35:
@@ -758,14 +796,15 @@ func on_snapshot(snap: PackedFloat32Array, shots: PackedFloat32Array, money_p: P
 	status_text = status
 	stats = stats_p
 	var seen: Dictionary = {}
-	var n: int = floori(snap.size() / 6.0)
+	var n: int = floori(snap.size() / 7.0)
 	for k in n:
-		var o: int = k * 6
+		var o: int = k * 7
 		var id: int = int(snap[o])
 		var kind: int = int(snap[o + 1])
 		var owner: int = int(snap[o + 2])
 		var p: Vector3 = Vector3(snap[o + 3], 0.0, snap[o + 4])
 		var frac: float = snap[o + 5]
+		var rank: int = int(snap[o + 6])
 		seen[id] = true
 		if not views.has(id):
 			_make_view(id, kind, owner)
@@ -784,6 +823,7 @@ func on_snapshot(snap: PackedFloat32Array, shots: PackedFloat32Array, money_p: P
 		if int(views[id].get_meta("owner", -99)) != owner:
 			_set_owner(id, owner)
 		_update_hp(id, kind, frac)
+		_update_rank(id, rank)
 	for id in views.keys():
 		if not seen.has(id):
 			var kd: int = info[id][0]
@@ -808,6 +848,7 @@ func on_snapshot(snap: PackedFloat32Array, shots: PackedFloat32Array, money_p: P
 	for k in m:
 		var o: int = k * 6
 		_spawn_shot(int(shots[o]), Vector3(shots[o + 1], 0.0, shots[o + 2]), Vector3(shots[o + 3], 0.0, shots[o + 4]), int(shots[o + 5]))
+	_handle_fx(fx_p)
 
 
 func _make_view(id: int, kind: int, owner: int) -> void:
@@ -1336,6 +1377,84 @@ func _show_end(title: String, final: bool) -> void:
 	bar.add_child(leave)
 
 
+func _power_ready(idx: int) -> bool:
+	if my_slot < 0 or stats.size() < 5 or my_slot >= stats[3].size():
+		return false
+	return float(stats[3][my_slot]) >= 1.0 and float(stats[4][my_slot][idx]) <= 0.0
+
+
+func _power_key(idx: int) -> void:
+	if not _power_ready(idx):
+		_msg("That power is not ready yet", Color(1.0, 0.8, 0.4))
+		return
+	if idx == 0:
+		targeting = 0
+		Input.set_default_cursor_shape(Input.CURSOR_CROSS)
+		_msg("Click the map to call in the strike  (Esc cancels)", Color(1.0, 0.85, 0.4))
+	else:
+		_cast_power(idx, Vector3.ZERO)
+
+
+func _cast_power(idx: int, pos: Vector3) -> void:
+	if multiplayer.is_server():
+		if sim != null:
+			sim.cmd_power(my_slot, idx, pos)
+	else:
+		srv_power.rpc_id(1, idx, pos)
+
+
+@rpc("any_peer", "reliable")
+func srv_power(idx: int, pos: Vector3) -> void:
+	if not multiplayer.is_server() or sim == null:
+		return
+	var slot: int = _slot_of(multiplayer.get_remote_sender_id())
+	if slot >= 0:
+		sim.cmd_power(slot, idx, pos)
+
+
+func _update_rank(id: int, rank: int) -> void:
+	var v: Node3D = views[id]
+	if int(v.get_meta("rank", 0)) == rank:
+		return
+	v.set_meta("rank", rank)
+	var old: Node = v.get_node_or_null("rank")
+	if old != null:
+		old.name = "rank_old"
+		old.queue_free()
+	if rank > 0:
+		var l: Label3D = _label3d("^".repeat(rank), Color(1.0, 0.85, 0.2), 0.0, 0.07)
+		l.name = "rank"
+		l.position.y = float(v.get_node("hp").position.y) + 1.1
+		v.add_child(l)
+
+
+func _handle_fx(fx_p: PackedFloat32Array) -> void:
+	var n: int = floori(fx_p.size() / 3.0)
+	for k in n:
+		var t: int = int(fx_p[k * 3])
+		var pos: Vector3 = Vector3(fx_p[k * 3 + 1], 0.0, fx_p[k * 3 + 2])
+		if t == 1: # incoming strike: red warning ring
+			var ring: MeshInstance3D = MeshInstance3D.new()
+			var cm: CylinderMesh = CylinderMesh.new()
+			cm.top_radius = 16.0
+			cm.bottom_radius = 16.0
+			cm.height = 0.12
+			ring.mesh = cm
+			var mat: StandardMaterial3D = _fx_material(Color(1.0, 0.2, 0.15, 0.35))
+			mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			ring.material_override = mat
+			ring.position = pos + Vector3(0, 0.3, 0)
+			add_child(ring)
+			get_tree().create_timer(2.5).timeout.connect(ring.queue_free)
+			_play3d("alarm", pos, -8.0)
+		elif t == 2: # strike lands
+			_play3d("boom", pos, 4.0)
+			_burst(pos + Vector3(0, 1, 0), 80, 1.1, 0.8, Color(1.0, 0.5, 0.12), 20.0, Vector3(0, -9, 0))
+			_burst(pos + Vector3(0, 2, 0), 40, 1.4, 1.2, Color(0.25, 0.22, 0.2), 9.0, Vector3(0, 1, 0))
+		elif t == 3: # promotion sparkle
+			_burst(pos + Vector3(0, 3, 0), 10, 0.6, 0.2, Color(1.0, 0.9, 0.3), 5.0, Vector3(0, -2, 0))
+
+
 func _turn(cur: float, tgt: float, step: float) -> float:
 	return cur + clampf(wrapf(tgt - cur, -PI, PI), -step, step)
 
@@ -1465,7 +1584,13 @@ func _unhandled_input(ev: InputEvent) -> void:
 				Input.set_default_cursor_shape(Input.CURSOR_ARROW)
 				if not moved and drag_start.distance_to(ev.position) > 6.0:
 					moved = true
-				if not moved or box_mode:
+				if not moved and targeting != -1:
+					var tg = _ground_point(ev.position)
+					if tg != null:
+						_cast_power(targeting, tg)
+					targeting = -1
+					Input.set_default_cursor_shape(Input.CURSOR_ARROW)
+				elif not moved or box_mode:
 					_finish_drag(ev.position)
 		elif ev.button_index == MOUSE_BUTTON_RIGHT:
 			if ev.pressed:
@@ -1503,8 +1628,18 @@ func _unhandled_input(ev: InputEvent) -> void:
 			_center_on_hq()
 		elif ev.keycode == KEY_X:
 			_stop_selected()
+		elif ev.keycode == KEY_Z:
+			_power_key(0)
+		elif ev.keycode == KEY_C:
+			_power_key(1)
+		elif ev.keycode == KEY_V:
+			_power_key(2)
 		elif ev.keycode == KEY_ESCAPE:
-			pause_layer.visible = not pause_layer.visible
+			if targeting != -1:
+				targeting = -1
+				Input.set_default_cursor_shape(Input.CURSOR_ARROW)
+			else:
+				pause_layer.visible = not pause_layer.visible
 
 
 func _is_unit(k: int) -> bool:
@@ -1565,6 +1700,10 @@ func _box_select(a: Vector2, b: Vector2) -> void:
 
 
 func _right_click(sp: Vector2) -> void:
+	if targeting != -1:
+		targeting = -1
+		Input.set_default_cursor_shape(Input.CURSOR_ARROW)
+		return
 	if selected.is_empty() or my_slot < 0:
 		return
 	var g = _ground_point(sp)
