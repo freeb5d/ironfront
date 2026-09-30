@@ -3,15 +3,35 @@ extends RefCounted
 ## Static game data. Countries are pure data: add one by adding an entry here.
 
 const MAX_SLOTS := 8
-const MAP_RADIUS := 90.0
 const START_MONEY := 500.0
-const INCOME := 6.0
+const INCOME := 2.0          # passive income per second
+const OIL_INCOME := 4.0      # per captured oil derrick per second
+const FARM_LOAD := 50.0      # money a farmer carries per trip
+const FARM_TIME := 2.5       # seconds spent gathering
+const MONEY_AMOUNT := 6000.0 # money in each field
 const UNIT_CAP := 40
 
 const PLAYER_COLORS := [
 	Color("2b6cff"), Color("ff3b30"), Color("ffd60a"), Color("30d158"),
 	Color("bf5af2"), Color("ff9f0a"), Color("64d2ff"), Color("f5f5f5"),
 ]
+
+# Map layout (world units, map spans -150..150). Two bases per side, money fields ($) around the
+# edges, five oil derricks in the sunken centre.
+const SLOT_POS := [
+	Vector3(-45, 0, -112), Vector3(45, 0, -112), Vector3(118, 0, -48), Vector3(118, 0, 48),
+	Vector3(45, 0, 112), Vector3(-45, 0, 112), Vector3(-118, 0, 48), Vector3(-118, 0, -48),
+]
+const MONEY_NODES := [
+	Vector3(-135, 0, -130), Vector3(135, 0, -130), Vector3(-135, 0, 130), Vector3(135, 0, 130),
+	Vector3(-72, 0, -130), Vector3(72, 0, -130), Vector3(-72, 0, 130), Vector3(72, 0, 130),
+	Vector3(-138, 0, -68), Vector3(138, 0, -68), Vector3(-138, 0, 68), Vector3(138, 0, 68),
+]
+const OIL_NODES := [
+	Vector3(0, 0, 0), Vector3(-56, 0, -22), Vector3(56, 0, 22), Vector3(-56, 0, 22), Vector3(56, 0, -22),
+]
+
+const FARMER := {"name": "Farmer", "cost": 75, "hp": 60, "dmg": 0, "rng": 0, "spd": 6.5, "cd": 1.0}
 
 # Each country trains two units: [0] light (cheap, fast), [1] heavy (armored / long range).
 const COUNTRIES := {
@@ -41,6 +61,7 @@ const COUNTRIES := {
 # Models per nation: HQ building, then [model, fit_by_height, target_size] for the light and heavy unit.
 const _U := "res://assets/units/"
 const _B := "res://assets/buildings/kenney_city_industrial/"
+const FARMER_VISUAL := [_U + "worker_a.glb", true, 2.3]
 const VISUALS := {
 	"USA": {"hq": _B + "building-a.glb", "units": [[_U + "soldier_b.glb", true, 2.4], [_U + "tank_a.glb", false, 5.0]]},
 	"China": {"hq": _B + "building-c.glb", "units": [[_U + "soldier_a.glb", true, 2.4], [_U + "tank_b.glb", false, 5.0]]},
@@ -55,9 +76,10 @@ static func country_names() -> Array:
 
 
 static func unit(country: String, idx: int) -> Dictionary:
+	if idx == 2:
+		return FARMER
 	return COUNTRIES[country]["units"][idx]
 
 
 static func slot_pos(i: int) -> Vector3:
-	var a: float = TAU * float(i) / float(MAX_SLOTS)
-	return Vector3(cos(a), 0.0, sin(a)) * MAP_RADIUS
+	return SLOT_POS[i]

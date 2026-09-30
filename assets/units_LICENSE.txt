@@ -2,3 +2,4 @@ Models in assets/units/ are by Quaternius, published on Poly Pizza (https://poly
 Page IDs: tank_a FA5daiyZQq, tank_b cW3zvvkMOM, tank_c jWS1CLA0RO, tank_d uYHpj7lz1J, tank_e j59k7ctnZM,
 soldier_a PpLF4rt4ah (Character Soldier), soldier_b Btfn3G5Xv4 (SWAT), vehicle_x AILdezfcv1.
 Props: Kenney "Mini Forest" 1.0 (https://kenney.nl/assets/mini-forest), CC0 - see assets/props/License.txt.
+worker_a.glb: "Worker" by Quaternius (poly.pizza, CC0). props/oil_pump.glb: spilled oil barrel by Quaternius (poly.pizza, CC0).

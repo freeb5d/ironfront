@@ -17,8 +17,9 @@ func _initialize() -> void:
 		if sc == null or not sc.can_instantiate():
 			printerr("script failed to compile: " + path)
 			ok = false
-	if sim.ents.size() != 8 * 5:
-		printerr("expected 40 starting entities, got %d" % sim.ents.size())
+	var expected: int = 8 * 7 + Data.MONEY_NODES.size() + Data.OIL_NODES.size()
+	if sim.ents.size() != expected:
+		printerr("expected %d starting entities, got %d" % [expected, sim.ents.size()])
 		ok = false
 
 	# player-style commands must work
@@ -42,7 +43,14 @@ func _initialize() -> void:
 	for a in sim.alive:
 		if a:
 			survivors += 1
-	print("t=%.0fs entities=%d survivors=%d status='%s'" % [sim.time, sim.ents.size(), survivors, sim.status])
+	var oil_owned: int = 0
+	for e in sim.ents.values():
+		if e.kind == 4 and e.owner >= 0:
+			oil_owned += 1
+	print("t=%.0fs entities=%d survivors=%d farmed=%d oil_owned=%d status='%s'" % [sim.time, sim.ents.size(), survivors, int(sim.farmed), oil_owned, sim.status])
+	if sim.farmed <= 0.0:
+		printerr("farmers never delivered any money")
+		ok = false
 	if sim.ents.size() <= 0:
 		ok = false
 

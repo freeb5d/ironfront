@@ -23,6 +23,9 @@ var projectiles: Array = []   # in-flight bullets / shells
 var moved: bool = false
 var box_mode: bool = false
 var pan_anchor = null
+var rdragging: bool = false
+var rstart: Vector2 = Vector2.ZERO
+var ground_tex: ImageTexture = null
 
 var cam_pivot: Node3D
 var cam: Camera3D
@@ -65,10 +68,12 @@ func _ready() -> void:
 func _autotest_finish() -> void:
 	# exercise the same code paths real input uses
 	for id in info:
-		if info[id][1] == my_slot and info[id][0] != 0:
+		if info[id][1] == my_slot and _is_unit(info[id][0]):
 			selected[id] = true
 	_train(0)
 	_train(1)
+	_train(2)
+	_box_select(Vector2(0, 0), Vector2(1280, 720))
 	_right_click(Vector2(640, 360))
 	_finish_drag(Vector2(100, 100))
 	# force the combat visuals that a real fight would trigger
@@ -133,7 +138,9 @@ func _build_world() -> void:
 	pm.size = Vector2(320, 320)
 	ground.mesh = pm
 	var gm: StandardMaterial3D = StandardMaterial3D.new()
-	gm.albedo_color = Color(0.22, 0.34, 0.2)
+	ground_tex = _make_ground_texture()
+	gm.albedo_texture = ground_tex
+	gm.roughness = 1.0
 	ground.material_override = gm
 	add_child(ground)
 
@@ -147,6 +154,37 @@ func _build_world() -> void:
 	cam_pivot.add_child(cam)
 	cam.make_current()
 
+
+
+func _make_ground_texture() -> ImageTexture:
+	# desert map: light edge strips, a sunken dark centre and a dark road across the middle
+	var n: int = 256
+	var img: Image = Image.create(n, n, false, Image.FORMAT_RGB8)
+	var noise: FastNoiseLite = FastNoiseLite.new()
+	noise.seed = 11
+	noise.frequency = 0.035
+	var sand: Color = Color(0.80, 0.70, 0.50)
+	var light: Color = Color(0.89, 0.81, 0.63)
+	var dark: Color = Color(0.46, 0.37, 0.26)
+	var road: Color = Color(0.25, 0.20, 0.15)
+	for py in n:
+		for px in n:
+			var x: float = (float(px) / n - 0.5) * 320.0
+			var z: float = (float(py) / n - 0.5) * 320.0
+			var nz: float = noise.get_noise_2d(x, z)
+			var c: Color = sand
+			if (absf(x) < 60.0 + nz * 8.0 and absf(z) > 72.0) or (absf(z) < 60.0 + nz * 8.0 and absf(x) > 78.0):
+				c = light
+			if absf(x) < 78.0 + nz * 10.0 and absf(z) < 66.0 + nz * 10.0:
+				c = dark
+			if absf(z - 7.0 * sin(x * 0.035)) < 6.0 + nz * 2.5:
+				c = road if absf(x) < 90.0 else road.lerp(sand, 0.35)
+			var g: float = nz * 0.04
+			c = Color(clampf(c.r + g, 0.0, 1.0), clampf(c.g + g, 0.0, 1.0), clampf(c.b + g, 0.0, 1.0))
+			if absf(x) > 152.0 or absf(z) > 152.0:
+				c = c.darkened(0.35)
+			img.set_pixel(px, py, c)
+	return ImageTexture.create_from_image(img)
 
 
 func _panel(root: Control) -> PanelContainer:
@@ -210,6 +248,7 @@ func _build_hud() -> void:
 	bottom.add_child(bh)
 	minimap = MiniMap.new()
 	minimap.game = self
+	minimap.bg = ground_tex
 	bh.add_child(minimap)
 	var bv: VBoxContainer = VBoxContainer.new()
 	bv.add_theme_constant_override("separation", 8)
@@ -217,15 +256,15 @@ func _build_hud() -> void:
 	bv.add_child(UI.label("TRAIN", 14, Color("8b98a9")))
 	if my_slot >= 0:
 		var country: String = Net.slots[my_slot]["country"]
-		for idx in 2:
+		for idx in 3:
 			var st: Dictionary = Data.unit(country, idx)
 			var b: Button = Button.new()
-			b.text = "[%s]  %s   $%d" % [["Q", "E"][idx], st["name"], st["cost"]]
+			b.text = "[%s]  %s   $%d" % [["Q", "E", "R"][idx], st["name"], st["cost"]]
 			b.custom_minimum_size = Vector2(250, 46)
 			b.pressed.connect(_train.bind(idx))
 			bv.add_child(b)
 			train_buttons.append(b)
-	var help: Label = UI.label("Click select   Drag = move map   Shift+drag box select   F army\nRMB move / attack   WASD pan   Wheel zoom   F11 fullscreen   Esc menu", 13, Color("8b98a9"))
+var help: Label = UI.label("Click select   Right-drag = box select   Right-click = move / attack / harvest\nLeft-drag = move map   WASD pan   Wheel zoom   F army   F11 fullscreen   Esc menu", 13, Color("8b98a9"))
 	bv.add_child(help)
 
 	# centre status (victory / defeat)
@@ -333,6 +372,8 @@ func _process(dt: float) -> void:
 				spd_scale = clampf(speed / (5.0 if kind_id == 2 else 6.0), 0.5, 1.8)
 			elif shoot_t > 0.0 and String(node.get_meta("shoot")) != "":
 				want = String(node.get_meta("shoot"))
+			elif kind_id == 3 and String(node.get_meta("work")) != "":
+				want = String(node.get_meta("work"))
 			ap.speed_scale = spd_scale
 			if want == "":
 				if ap.is_playing():
@@ -347,6 +388,10 @@ func _process(dt: float) -> void:
 	if my_slot >= 0 and my_slot < money.size():
 		money_label.text = "$ %d" % int(money[my_slot])
 	sel_label.text = ("Selected: %d" % selected.size()) if not selected.is_empty() else ""
+	var oil_count: Dictionary = {}
+	for oid in info:
+		if info[oid][0] == 4 and info[oid][1] >= 0:
+			oil_count[info[oid][1]] = int(oil_count.get(info[oid][1], 0)) + 1
 	var lines: PackedStringArray = PackedStringArray()
 	for i in Net.slots.size():
 		var sl: Dictionary = Net.slots[i]
@@ -354,7 +399,7 @@ func _process(dt: float) -> void:
 			var n: String = str(sl["name"]) if str(sl["name"]) != "" else "Bot"
 			var dead: bool = i < alive_arr.size() and not alive_arr[i]
 			var col: String = Data.PLAYER_COLORS[i].to_html(false)
-			var line: String = "[color=#%s]■[/color] %s  [color=#8b98a9]%s[/color]" % [col, n, sl["country"]]
+			var line: String = "[color=#%s]■[/color] %s  [color=#8b98a9]%s[/color]  [color=#e3b341]oil %d[/color]" % [col, n, sl["country"], int(oil_count.get(i, 0))]
 			if dead:
 				line = "[s][color=#6b7280]%s  %s[/color][/s]  [color=#ff7b72]OUT[/color]" % [n, sl["country"]]
 			lines.append(line)
@@ -370,13 +415,18 @@ func _process(dt: float) -> void:
 			var g = _ground_point(m)
 			if g != null:
 				cam_pivot.position += Vector3(pan_anchor.x - g.x, 0.0, pan_anchor.z - g.z)
-				cam_pivot.position.x = clampf(cam_pivot.position.x, -140.0, 140.0)
-				cam_pivot.position.z = clampf(cam_pivot.position.z, -140.0, 140.0)
+				cam_pivot.position.x = clampf(cam_pivot.position.x, -150.0, 150.0)
+				cam_pivot.position.z = clampf(cam_pivot.position.z, -150.0, 150.0)
 		drag_rect.visible = moved and box_mode
 		if drag_rect.visible:
 			drag_rect.position = Vector2(minf(drag_start.x, m.x), minf(drag_start.y, m.y))
 			drag_rect.size = (m - drag_start).abs()
 		Input.set_default_cursor_shape(Input.CURSOR_DRAG if (moved and not box_mode) else Input.CURSOR_ARROW)
+	elif rdragging:
+		var mr: Vector2 = get_viewport().get_mouse_position()
+		drag_rect.visible = rstart.distance_to(mr) > 6.0
+		drag_rect.position = Vector2(minf(rstart.x, mr.x), minf(rstart.y, mr.y))
+		drag_rect.size = (mr - rstart).abs()
 	else:
 		drag_rect.visible = false
 
@@ -416,12 +466,16 @@ func on_snapshot(snap: PackedFloat32Array, shots: PackedFloat32Array, money_p: P
 			views[id].position = p
 		targets[id] = p
 		info[id] = [kind, owner, frac]
+		if int(views[id].get_meta("owner", -99)) != owner:
+			_set_owner(id, owner)
 		_update_hp(id, kind, frac)
 	for id in views.keys():
 		if not seen.has(id):
 			var kd: int = info[id][0]
 			var bpos: Vector3 = views[id].position + Vector3(0, 1.5, 0)
-			if kd == 0:
+			if kd == 5:
+				_burst(bpos, 12, 0.6, 0.2, Color(1.0, 0.85, 0.2), 5.0, Vector3(0, -9, 0))
+			elif kd == 0:
 				_burst(bpos, 60, 1.0, 0.6, Color(1.0, 0.45, 0.1), 14.0, Vector3(0, -8, 0))
 			elif kd == 2:
 				_burst(bpos, 24, 0.7, 0.4, Color(1.0, 0.45, 0.1), 9.0, Vector3(0, -10, 0))
@@ -445,8 +499,8 @@ func _make_view(id: int, kind: int, owner: int) -> void:
 	pivot.name = "pivot"
 	root.add_child(pivot)
 
-	var country: String = Net.slots[owner]["country"]
-	var col: Color = Data.PLAYER_COLORS[owner]
+	var country: String = Net.slots[owner]["country"] if owner >= 0 else ""
+	var col: Color = Data.PLAYER_COLORS[owner] if owner >= 0 else Color(0.6, 0.6, 0.6)
 	var bar_w: float = 2.2
 	var bar_y: float = 3.6
 	var ring_r: float = 1.9
@@ -462,6 +516,18 @@ func _make_view(id: int, kind: int, owner: int) -> void:
 		bar_y = 9.0
 		ring_r = 8.5
 		disc_r = 8.5
+	elif kind == 3:
+		model_path = Data.FARMER_VISUAL[0]
+		by_h = Data.FARMER_VISUAL[1]
+		size = Data.FARMER_VISUAL[2]
+	elif kind == 4:
+		bar_w = 6.0
+		bar_y = 11.5
+		disc_r = 5.0
+	elif kind == 5:
+		bar_w = 5.0
+		bar_y = 5.0
+		disc_r = 0.1
 	else:
 		var v: Array = Data.VISUALS[country]["units"][kind - 1]
 		model_path = v[0]
@@ -485,22 +551,28 @@ func _make_view(id: int, kind: int, owner: int) -> void:
 	dmat.albedo_color = col
 	disc.material_override = dmat
 	disc.position.y = 0.07
+	disc.visible = kind != 5
 	pivot.add_child(disc)
+	root.set_meta("disc", dmat)
+	root.set_meta("owner", owner)
 
-	var res = load(model_path)
-	if res != null:
-		var inst: Node3D = res.instantiate()
-		pivot.add_child(inst)
-		_fit(inst, size, by_h)
-		_setup_anim(root, inst)
+	if kind == 4 or kind == 5:
+		_static_visual(pivot, kind)
 	else:
-		var fb: MeshInstance3D = MeshInstance3D.new()
-		var cm: CapsuleMesh = CapsuleMesh.new()
-		cm.radius = 0.6
-		cm.height = 2.0
-		fb.mesh = cm
-		fb.position.y = 1.0
-		pivot.add_child(fb)
+		var res = load(model_path)
+		if res != null:
+			var inst: Node3D = res.instantiate()
+			pivot.add_child(inst)
+			_fit(inst, size, by_h)
+			_setup_anim(root, inst)
+		else:
+			var fb: MeshInstance3D = MeshInstance3D.new()
+			var cm: CapsuleMesh = CapsuleMesh.new()
+			cm.radius = 0.6
+			cm.height = 2.0
+			fb.mesh = cm
+			fb.position.y = 1.0
+			pivot.add_child(fb)
 
 	var bar: MeshInstance3D = MeshInstance3D.new()
 	var barm: BoxMesh = BoxMesh.new()
@@ -535,6 +607,89 @@ func _make_view(id: int, kind: int, owner: int) -> void:
 
 
 # ---- model helpers ----
+
+func _set_owner(id: int, owner: int) -> void:
+	var v: Node3D = views[id]
+	v.set_meta("owner", owner)
+	var mat: StandardMaterial3D = v.get_meta("disc")
+	mat.albedo_color = Data.PLAYER_COLORS[owner] if owner >= 0 else Color(0.6, 0.6, 0.6)
+
+
+func _label3d(text: String, col: Color, y: float, px: float) -> Label3D:
+	var l: Label3D = Label3D.new()
+	l.text = text
+	l.font_size = 96
+	l.pixel_size = px
+	l.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	l.modulate = col
+	l.outline_size = 16
+	l.outline_modulate = Color(0, 0, 0)
+	l.no_depth_test = true
+	l.position.y = y
+	return l
+
+
+func _static_visual(pivot: Node3D, kind: int) -> void:
+	if kind == 5:
+		# pile of gold bars + floating $
+		var gold: StandardMaterial3D = StandardMaterial3D.new()
+		gold.albedo_color = Color(1.0, 0.78, 0.15)
+		gold.metallic = 0.6
+		gold.roughness = 0.35
+		var offs: Array = [Vector3(0, 0, 0), Vector3(1.7, 0, 1.0), Vector3(-1.6, 0, 0.9), Vector3(0.3, 0, -1.8), Vector3(0.2, 0.9, 0.1)]
+		for k in offs.size():
+			var bx: MeshInstance3D = MeshInstance3D.new()
+			var bm: BoxMesh = BoxMesh.new()
+			bm.size = Vector3(2.4, 0.9, 1.6)
+			bx.mesh = bm
+			bx.material_override = gold
+			bx.position = offs[k] + Vector3(0, 0.45, 0)
+			bx.rotation.y = 0.6 * k
+			pivot.add_child(bx)
+		pivot.add_child(_label3d("$", Color(0.3, 1.0, 0.4), 4.0, 0.03))
+	else:
+		# oil derrick: dark base, tower, crossbar, barrels and an OIL tag
+		var steel: StandardMaterial3D = StandardMaterial3D.new()
+		steel.albedo_color = Color(0.12, 0.12, 0.14)
+		var base: MeshInstance3D = MeshInstance3D.new()
+		var cyl: CylinderMesh = CylinderMesh.new()
+		cyl.top_radius = 3.2
+		cyl.bottom_radius = 3.6
+		cyl.height = 0.8
+		base.mesh = cyl
+		base.material_override = steel
+		base.position.y = 0.4
+		pivot.add_child(base)
+		for sx in [-1.0, 1.0]:
+			for sz in [-1.0, 1.0]:
+				var leg: MeshInstance3D = MeshInstance3D.new()
+				var lm: BoxMesh = BoxMesh.new()
+				lm.size = Vector3(0.35, 9.0, 0.35)
+				leg.mesh = lm
+				leg.material_override = steel
+				leg.position = Vector3(sx * 1.1, 4.5, sz * 1.1)
+				leg.rotation = Vector3(sz * -0.06, 0.0, sx * 0.06)
+				pivot.add_child(leg)
+		var bar: MeshInstance3D = MeshInstance3D.new()
+		var bm2: BoxMesh = BoxMesh.new()
+		bm2.size = Vector3(6.0, 0.5, 0.5)
+		bar.mesh = bm2
+		bar.material_override = steel
+		bar.position.y = 8.2
+		bar.rotation.y = 0.5
+		pivot.add_child(bar)
+		for k in 3:
+			var holder: Node3D = Node3D.new()
+			holder.position = Vector3(3.4 * cos(k * 2.1 + 0.6), 0.0, 3.4 * sin(k * 2.1 + 0.6))
+			pivot.add_child(holder)
+			var res = load("res://assets/props/oil_pump.glb")
+			if res != null:
+				var inst: Node3D = res.instantiate()
+				holder.add_child(inst)
+				_fit(inst, 1.8, false)
+		pivot.add_child(_label3d("OIL", Color(1.0, 0.85, 0.1), 11.0, 0.045))
+
+
 
 func _bounds(inst: Node3D) -> AABB:
 	var parent: Node3D = inst.get_parent() as Node3D
@@ -584,6 +739,7 @@ func _setup_anim(root: Node3D, inst: Node3D) -> void:
 	var idle: String = ""
 	var run: String = ""
 	var shoot: String = ""
+	var work: String = ""
 	for n in ap.get_animation_list():
 		var low: String = String(n).to_lower()
 		if idle == "" and low.ends_with("idle"):
@@ -592,7 +748,9 @@ func _setup_anim(root: Node3D, inst: Node3D) -> void:
 			run = String(n)
 		if shoot == "" and (low.ends_with("idle_gun_shoot") or low.ends_with("idle_shoot")):
 			shoot = String(n)
-	for nm in [idle, run, shoot]:
+		if work == "" and low.ends_with("interact"):
+			work = String(n)
+	for nm in [idle, run, shoot, work]:
 		if nm != "":
 			ap.get_animation(nm).loop_mode = Animation.LOOP_LINEAR
 	root.set_meta("ap", ap)
@@ -600,6 +758,7 @@ func _setup_anim(root: Node3D, inst: Node3D) -> void:
 	root.set_meta("run", run)
 	root.set_meta("shoot", shoot)
 	root.set_meta("shoot_t", 0.0)
+	root.set_meta("work", work)
 	root.set_meta("mv", 0.0)
 	if idle != "":
 		ap.play(idle)
@@ -636,6 +795,12 @@ func _scatter_props() -> void:
 		for i in Data.MAX_SLOTS:
 			if p.distance_to(Data.slot_pos(i)) < 34.0:
 				blocked = true
+		for mp in Data.MONEY_NODES:
+			if p.distance_to(mp) < 16.0:
+				blocked = true
+		for op in Data.OIL_NODES:
+			if p.distance_to(op) < 16.0:
+				blocked = true
 		if blocked:
 			continue
 		if r.randf() < 0.65:
@@ -666,7 +831,10 @@ func _decorate_bases() -> void:
 
 func _update_hp(id: int, _kind: int, frac: float) -> void:
 	var bar: Node3D = views[id].get_node("hp")
-	bar.visible = frac < 0.999
+	if _kind == 4:
+		bar.visible = frac > 0.07 # capture progress
+	else:
+		bar.visible = frac < 0.999
 	bar.scale.x = maxf(frac, 0.01)
 
 
@@ -777,8 +945,8 @@ func _pan_camera(dt: float) -> void:
 		if m.y >= sz.y - 4.0:
 			dir.y += 1.0
 	cam_pivot.position += Vector3(dir.x, 0, dir.y) * zoom * 1.2 * dt
-	cam_pivot.position.x = clampf(cam_pivot.position.x, -140.0, 140.0)
-	cam_pivot.position.z = clampf(cam_pivot.position.z, -140.0, 140.0)
+	cam_pivot.position.x = clampf(cam_pivot.position.x, -150.0, 150.0)
+	cam_pivot.position.z = clampf(cam_pivot.position.z, -150.0, 150.0)
 
 
 # ------------------------------------------------------------------ input
@@ -799,8 +967,16 @@ func _unhandled_input(ev: InputEvent) -> void:
 					moved = true
 				if not moved or box_mode:
 					_finish_drag(ev.position)
-		elif ev.button_index == MOUSE_BUTTON_RIGHT and ev.pressed:
-			_right_click(ev.position)
+		elif ev.button_index == MOUSE_BUTTON_RIGHT:
+			if ev.pressed:
+				rdragging = true
+				rstart = ev.position
+			elif rdragging:
+				rdragging = false
+				if rstart.distance_to(ev.position) > 6.0:
+					_box_select(rstart, ev.position)
+				else:
+					_right_click(ev.position)
 		elif ev.button_index == MOUSE_BUTTON_WHEEL_UP and ev.pressed:
 			zoom = clampf(zoom - 6.0, 20.0, 140.0)
 			_update_cam()
@@ -815,10 +991,16 @@ func _unhandled_input(ev: InputEvent) -> void:
 		elif ev.keycode == KEY_F:
 			selected.clear()
 			for id in info:
-				if info[id][1] == my_slot and info[id][0] != 0:
+				if info[id][1] == my_slot and (info[id][0] == 1 or info[id][0] == 2):
 					selected[id] = true
+		elif ev.keycode == KEY_R:
+			_train(2)
 		elif ev.keycode == KEY_ESCAPE:
 			pause_layer.visible = not pause_layer.visible
+
+
+func _is_unit(k: int) -> bool:
+	return k >= 1 and k <= 3
 
 
 func _ground_point(sp: Vector2) -> Variant:
@@ -843,7 +1025,7 @@ func _finish_drag(end: Vector2) -> void:
 		var best: int = -1
 		var best_d: float = 2.5
 		for id in info:
-			if info[id][1] == my_slot and info[id][0] != 0:
+			if info[id][1] == my_slot and _is_unit(info[id][0]):
 				var d: float = Vector2(targets[id].x - g.x, targets[id].z - g.z).length()
 				if d < best_d:
 					best_d = d
@@ -851,11 +1033,18 @@ func _finish_drag(end: Vector2) -> void:
 		if best != -1:
 			selected[best] = true
 	else:
-		var rect: Rect2 = Rect2(drag_start, Vector2.ZERO).expand(end)
-		for id in info:
-			if info[id][1] == my_slot and info[id][0] != 0:
-				if rect.has_point(cam.unproject_position(views[id].position)):
-					selected[id] = true
+		_box_select(drag_start, end)
+
+
+func _box_select(a: Vector2, b: Vector2) -> void:
+	selected.clear()
+	if my_slot < 0:
+		return
+	var rect: Rect2 = Rect2(a, Vector2.ZERO).expand(b)
+	for id in info:
+		if info[id][1] == my_slot and _is_unit(info[id][0]):
+			if rect.has_point(cam.unproject_position(views[id].position)):
+				selected[id] = true
 
 
 func _right_click(sp: Vector2) -> void:
@@ -865,15 +1054,24 @@ func _right_click(sp: Vector2) -> void:
 	if g == null:
 		return
 	var enemy: int = -1
+	var field: int = -1
+	var oil: bool = false
 	var best_d: float = 100.0
 	for id in info:
-		if info[id][1] == my_slot:
-			continue
-		var reach: float = 8.0 if info[id][0] == 0 else 2.5
+		var k: int = info[id][0]
 		var d: float = Vector2(targets[id].x - g.x, targets[id].z - g.z).length()
-		if d < reach and d < best_d:
-			best_d = d
-			enemy = id
+		if k == 5:
+			if d < 4.5 and d < best_d:
+				best_d = d
+				field = id
+		elif k == 4:
+			if d < 7.0:
+				oil = true
+		elif info[id][1] != my_slot:
+			var reach: float = 8.0 if k == 0 else 2.5
+			if d < reach and d < best_d:
+				best_d = d
+				enemy = id
 	var ids: Array = selected.keys()
 	if ids.size() > 200:
 		ids = ids.slice(0, 200)
@@ -882,11 +1080,16 @@ func _right_click(sp: Vector2) -> void:
 			sim.cmd_attack(my_slot, ids, enemy)
 		else:
 			srv_attack.rpc_id(1, ids, enemy)
+	elif field != -1:
+		if multiplayer.is_server():
+			sim.cmd_harvest(my_slot, ids, field)
+		else:
+			srv_harvest.rpc_id(1, ids, field)
 	else:
 		if multiplayer.is_server():
-			sim.cmd_move(my_slot, ids, g, false)
+			sim.cmd_move(my_slot, ids, g, oil)
 		else:
-			srv_move.rpc_id(1, ids, g)
+			srv_move.rpc_id(1, ids, g, oil)
 
 
 func _train(idx: int) -> void:
@@ -900,12 +1103,21 @@ func _train(idx: int) -> void:
 
 
 @rpc("any_peer", "reliable")
-func srv_move(ids: Array, pos: Vector3) -> void:
+func srv_move(ids: Array, pos: Vector3, amove: bool) -> void:
 	if not multiplayer.is_server() or sim == null or ids.size() > 200:
 		return
 	var slot: int = _slot_of(multiplayer.get_remote_sender_id())
 	if slot >= 0:
-		sim.cmd_move(slot, ids, pos, false)
+		sim.cmd_move(slot, ids, pos, amove)
+
+
+@rpc("any_peer", "reliable")
+func srv_harvest(ids: Array, node_id: int) -> void:
+	if not multiplayer.is_server() or sim == null or ids.size() > 200:
+		return
+	var slot: int = _slot_of(multiplayer.get_remote_sender_id())
+	if slot >= 0:
+		sim.cmd_harvest(slot, ids, node_id)
 
 
 @rpc("any_peer", "reliable")

@@ -5,6 +5,7 @@ extends Control
 const WORLD := 300.0
 
 var game: Node = null
+var bg: Texture2D = null
 
 
 func _init() -> void:
@@ -17,13 +18,23 @@ func _to_map(w: Vector3) -> Vector2:
 
 
 func _draw() -> void:
-	draw_rect(Rect2(Vector2.ZERO, size), Color(0.09, 0.15, 0.1))
+	if bg != null:
+		draw_texture_rect_region(bg, Rect2(Vector2.ZERO, size), Rect2(8, 8, 240, 240))
+	else:
+		draw_rect(Rect2(Vector2.ZERO, size), Color(0.09, 0.15, 0.1))
 	if game != null:
 		for id in game.info:
 			var p: Vector2 = _to_map(game.targets[id])
-			var col: Color = Data.PLAYER_COLORS[game.info[id][1]]
-			if game.info[id][0] == 0:
+			var kind: int = game.info[id][0]
+			var owner: int = game.info[id][1]
+			var col: Color = Data.PLAYER_COLORS[owner] if owner >= 0 else Color(0.7, 0.7, 0.7)
+			if kind == 0:
 				draw_rect(Rect2(p - Vector2(4, 4), Vector2(8, 8)), col)
+			elif kind == 5:
+				draw_rect(Rect2(p - Vector2(3, 3), Vector2(6, 6)), Color(0.2, 0.9, 0.3))
+			elif kind == 4:
+				draw_circle(p, 5.0, col)
+				draw_circle(p, 2.5, Color(1.0, 0.85, 0.1))
 			else:
 				draw_circle(p, 2.0, col)
 		var c: Vector2 = _to_map(game.cam_pivot.position)

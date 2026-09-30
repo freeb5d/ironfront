@@ -56,7 +56,7 @@ You choose your nation on a dedicated selection screen before every match (and c
 
 Destroy every enemy **headquarters**. A player whose HQ falls is eliminated and all their units vanish. The last commander standing wins.
 
-- Income: **6 credits per second**, start with 500.
+- Economy: start with 500. Train **farmers** (`R`) and they harvest the green **$ fields** around the map edges, carrying money back to your HQ. Move combat units onto a yellow **oil derrick** for a few seconds to capture it: each derrick you hold pays +4 per second. The five derricks sit in the contested centre. A small trickle of passive income keeps a broken economy alive.
 - Unit cap: 40 per player.
 - Units automatically engage nearby enemies. Units you send with a plain move order ignore enemies until they arrive.
 
@@ -66,11 +66,12 @@ Destroy every enemy **headquarters**. A player whose HQ falls is eliminated and 
 |---|---|
 | Left click | Select a unit |
 | Left drag on empty ground | Move (pan) the map |
-| **Shift** + left drag | Box-select units |
 | **F** | Select your whole army |
 | Right click ground | Move selected units |
+| Right click a $ field | Send selected farmers to harvest it |
+| Right drag | Box-select units |
 | Right click enemy | Attack that target |
-| **Q** / **E** | Train light / heavy unit |
+| **Q** / **E** / **R** | Train light unit / heavy unit / farmer |
 | **W A S D**, arrows, screen edges | Pan camera |
 | Mouse wheel | Zoom |
 | Minimap click / drag | Jump the camera |
