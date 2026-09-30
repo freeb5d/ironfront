@@ -1,0 +1,9 @@
+{
+	"FileVersion": 3,
+	"EngineAssociation": "5.4",
+	"Category": "",
+	"Description": "IronFront - a Generals-style RTS",
+	"Modules": [
+		{ "Name": "IronFront", "Type": "Runtime", "LoadingPhase": "Default" }
+	]
+}
