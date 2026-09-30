@@ -32,6 +32,8 @@ Bleeding-edge builds of every commit are also available as artifacts on the [Act
 - Fullscreen, Generals-style interface: command bar, framed minimap, money plate, event messages
 - 5 nations, 8 players, LAN / direct-IP multiplayer, bots with Easy / Normal / Hard difficulty
 - Base building like the classics: train a **Builder** (`B`), select it and construct a Power Plant (`Y`), Supply Depot (`U`), Barracks (`I`), War Factory (`O`) and Turrets (`P`)
+- Research upgrades: Armor Plating, Weapon Tuning (need a Barracks) and Logistics
+- A nation-specific **Superweapon** (Orbital Cannon, Nuke Missile, Tactical Nuke, Jericho Strike, Scud Storm): needs a War Factory, long cooldown, 6-second warning ring, huge blast
 - Power management: buildings draw power, and on low power production slows down and turrets shut off
 - Tech and production queues: Barracks speed up infantry, the War Factory unlocks heavy vehicles (and needs a Barracks first)
 - Economy with farmers, $ fields (a Supply Depot shortens the trips) and capturable oil derricks
@@ -100,6 +102,8 @@ Destroy every enemy **headquarters**. A player whose HQ falls is eliminated and 
 | **H** / **Home** | Jump to your base |
 | **B** | Train a builder, then select it to see the build menu |
 | **Y U I O P** | Place Power Plant / Supply Depot / Barracks / War Factory / Turret (builder selected) |
+| **T** / **J** | Build the Superweapon (builder selected) / fire it (then click the map) |
+| **K** / **L** / **M** | Research Armor / Weapons / Logistics |
 | Right click an unfinished building | Send builders to help construct it |
 | **Z** / **C** / **V** | Commander powers: strike (then click the map) / reinforcements / field repair |
 | **Esc** | Pause menu and settings |
@@ -129,7 +133,7 @@ tests/smoke.gd   headless full-match test run by CI
 - [x] Veterancy and commander powers
 - [x] Base building with builders, power and production queues
 - [ ] More buildings and upgrades (tech tree, strategy centre)
-- [ ] Superweapons and upgrades
+- [x] Superweapons and upgrades
 - [ ] Challenge ladder (single-player boss battles)
 - [ ] Garrisonable buildings
 - [ ] Pathfinding and unit collision
