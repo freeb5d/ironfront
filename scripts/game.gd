@@ -26,6 +26,13 @@ var pan_anchor = null
 var rdragging: bool = false
 var rstart: Vector2 = Vector2.ZERO
 var ground_tex: ImageTexture = null
+var msg_label: RichTextLabel
+var plate: PanelContainer
+var bottom_bar: PanelContainer
+var info_label: RichTextLabel
+var unit_bar: ProgressBar
+var msgs: Array = []          # [text, ttl, colour]
+var last_alert: float = -99.0
 
 var cam_pivot: Node3D
 var cam: Camera3D
@@ -49,7 +56,7 @@ func _ready() -> void:
 		if Net.slots[i]["type"] == "human" and Net.slots[i]["peer"] == me:
 			my_slot = i
 	_build_world()
-	_build_hud()
+	_build_hud_v2()
 	cam_pivot.position = Data.slot_pos(maxi(my_slot, 0)) * 0.75
 	_update_cam()
 	Net.server_lost.connect(_leave)
@@ -264,7 +271,7 @@ func _build_hud() -> void:
 			b.pressed.connect(_train.bind(idx))
 			bv.add_child(b)
 			train_buttons.append(b)
-var help: Label = UI.label("Click select   Right-drag = box select   Right-click = move / attack / harvest\nLeft-drag = move map   WASD pan   Wheel zoom   F army   F11 fullscreen   Esc menu", 13, Color("8b98a9"))
+	var help: Label = UI.label("Click select   Right-drag = box select   Right-click = move / attack / harvest\nLeft-drag = move map   WASD pan   Wheel zoom   F army   F11 fullscreen   Esc menu", 13, Color("8b98a9"))
 	bv.add_child(help)
 
 	# centre status (victory / defeat)
@@ -283,6 +290,224 @@ var help: Label = UI.label("Click select   Right-drag = box select   Right-click
 	root.add_child(drag_rect)
 
 	_build_pause()
+
+
+func _sb(fill: Color, border: Color, bw: int, radius: int, margin: int) -> StyleBoxFlat:
+	var sb: StyleBoxFlat = UI.box(fill, border, bw, radius)
+	sb.set_content_margin_all(margin)
+	return sb
+
+
+func _tile(text: String, cb: Callable) -> Button:
+	var b: Button = Button.new()
+	b.text = text
+	b.custom_minimum_size = Vector2(104, 76)
+	b.add_theme_font_size_override("font_size", 15)
+	b.pressed.connect(cb)
+	return b
+
+
+func _empty_tile() -> PanelContainer:
+	var p: PanelContainer = PanelContainer.new()
+	p.custom_minimum_size = Vector2(104, 76)
+	p.add_theme_stylebox_override("panel", _sb(Color(0.05, 0.08, 0.12), Color(0.16, 0.22, 0.30), 2, 4, 4))
+	return p
+
+
+func _msg(text: String, col: Color = Color(1, 1, 1)) -> void:
+	msgs.append([text, 6.0, col])
+	if msgs.size() > 5:
+		msgs.pop_front()
+
+
+func _select_kinds(kinds: Array) -> void:
+	selected.clear()
+	for id in info:
+		if info[id][1] == my_slot and kinds.has(info[id][0]):
+			selected[id] = true
+
+
+func _build_hud_v2() -> void:
+	var layer: CanvasLayer = CanvasLayer.new()
+	add_child(layer)
+	var root: Control = Control.new()
+	root.theme = UI.make_theme()
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(root)
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+
+	# event messages, top-left
+	msg_label = RichTextLabel.new()
+	msg_label.bbcode_enabled = true
+	msg_label.fit_content = true
+	msg_label.scroll_active = false
+	msg_label.custom_minimum_size = Vector2(560, 0)
+	msg_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	msg_label.add_theme_font_size_override("normal_font_size", 22)
+	msg_label.add_theme_constant_override("outline_size", 6)
+	msg_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	msg_label.position = Vector2(16, 12)
+	root.add_child(msg_label)
+
+	# players list, top-right
+	var pl: PanelContainer = _panel(root)
+	pl.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	pl.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	pl.offset_top = 10
+	pl.offset_right = -10
+	players_label = RichTextLabel.new()
+	players_label.bbcode_enabled = true
+	players_label.fit_content = true
+	players_label.scroll_active = false
+	players_label.custom_minimum_size = Vector2(300, 0)
+	players_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pl.add_child(players_label)
+
+	# bottom command bar
+	bottom_bar = PanelContainer.new()
+	var bsb: StyleBoxFlat = _sb(Color(0.07, 0.11, 0.17, 0.97), Color(0.42, 0.55, 0.70), 0, 0, 8)
+	bsb.border_width_top = 5
+	bottom_bar.add_theme_stylebox_override("panel", bsb)
+	root.add_child(bottom_bar)
+	bottom_bar.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+	bottom_bar.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	bottom_bar.custom_minimum_size = Vector2(0, 190)
+	var row: HBoxContainer = HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	bottom_bar.add_child(row)
+
+	# minimap in a steel frame
+	var frame: PanelContainer = PanelContainer.new()
+	frame.add_theme_stylebox_override("panel", _sb(Color(0.02, 0.03, 0.05), Color(0.45, 0.58, 0.72), 5, 6, 4))
+	row.add_child(frame)
+	minimap = MiniMap.new()
+	minimap.game = self
+	minimap.bg = ground_tex
+	minimap.custom_minimum_size = Vector2(200, 200)
+	frame.add_child(minimap)
+
+	# command tiles in the centre
+	var centre: VBoxContainer = VBoxContainer.new()
+	centre.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	centre.add_theme_constant_override("separation", 6)
+	row.add_child(centre)
+	sel_label = UI.label("", 16, Color("b9c6d6"))
+	centre.add_child(sel_label)
+	var grid: GridContainer = GridContainer.new()
+	grid.columns = 6
+	grid.add_theme_constant_override("h_separation", 6)
+	grid.add_theme_constant_override("v_separation", 6)
+	centre.add_child(grid)
+	var used: int = 0
+	if my_slot >= 0:
+		var country: String = Net.slots[my_slot]["country"]
+		for idx in 3:
+			var st: Dictionary = Data.unit(country, idx)
+			var b: Button = _tile("%s\n$%d\n[%s]" % [st["name"], st["cost"], ["Q", "E", "R"][idx]], _train.bind(idx))
+			grid.add_child(b)
+			train_buttons.append(b)
+			used += 1
+	grid.add_child(_tile("Army\n\n[F]", _select_kinds.bind([1, 2])))
+	grid.add_child(_tile("Farmers\n\n[G]", _select_kinds.bind([3])))
+	used += 2
+	for k in range(used, 12):
+		grid.add_child(_empty_tile())
+
+	# nation panel on the right
+	var right: PanelContainer = PanelContainer.new()
+	right.add_theme_stylebox_override("panel", _sb(Color(0.05, 0.08, 0.12), Color(0.45, 0.58, 0.72), 3, 6, 10))
+	row.add_child(right)
+	var rh: HBoxContainer = HBoxContainer.new()
+	rh.add_theme_constant_override("separation", 10)
+	right.add_child(rh)
+	var rv: VBoxContainer = VBoxContainer.new()
+	rv.custom_minimum_size = Vector2(230, 0)
+	rh.add_child(rv)
+	var cname: String = Net.slots[my_slot]["country"] if my_slot >= 0 else "Spectator"
+	var ccol: Color = Data.PLAYER_COLORS[maxi(my_slot, 0)]
+	rv.add_child(UI.label(cname.to_upper(), 30, ccol))
+	info_label = RichTextLabel.new()
+	info_label.bbcode_enabled = true
+	info_label.fit_content = true
+	info_label.scroll_active = false
+	info_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	rv.add_child(info_label)
+	unit_bar = ProgressBar.new()
+	unit_bar.fill_mode = ProgressBar.FILL_BOTTOM_TO_TOP
+	unit_bar.show_percentage = false
+	unit_bar.max_value = Data.UNIT_CAP
+	unit_bar.custom_minimum_size = Vector2(22, 120)
+	rh.add_child(unit_bar)
+
+	# money plate above the bar
+	plate = PanelContainer.new()
+	plate.add_theme_stylebox_override("panel", _sb(Color(0.05, 0.08, 0.12, 0.97), Color(0.55, 0.70, 0.85), 3, 8, 8))
+	root.add_child(plate)
+	money_label = UI.label("$ 0", 30, Color(0.4, 1.0, 0.5))
+	plate.add_child(money_label)
+
+	# centre status (victory / defeat)
+	status_label = UI.label("", 72, UI.ACCENT)
+	status_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	status_label.add_theme_constant_override("outline_size", 12)
+	root.add_child(status_label)
+	status_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	status_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	status_label.grow_vertical = Control.GROW_DIRECTION_BOTH
+
+	drag_rect = ColorRect.new()
+	drag_rect.color = Color(0.2, 1, 0.2, 0.15)
+	drag_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	drag_rect.visible = false
+	root.add_child(drag_rect)
+
+	_build_pause()
+
+
+func _update_hud(dt: float) -> void:
+	var vs: Vector2 = get_viewport().get_visible_rect().size
+	plate.position = Vector2((vs.x - plate.size.x) * 0.5, vs.y - bottom_bar.size.y - plate.size.y + 6.0)
+	# event messages fade out
+	var text: String = ""
+	var i: int = msgs.size() - 1
+	while i >= 0:
+		msgs[i][1] -= dt
+		if msgs[i][1] <= 0.0:
+			msgs.remove_at(i)
+		i -= 1
+	for m in msgs:
+		text += "[color=#%s]%s[/color]\n" % [m[2].to_html(false), m[0]]
+	msg_label.text = text
+	# selection summary and nation stats
+	var light: int = 0
+	var heavy: int = 0
+	var farm: int = 0
+	for id in selected:
+		if info.has(id):
+			match int(info[id][0]):
+				1:
+					light += 1
+				2:
+					heavy += 1
+				3:
+					farm += 1
+	sel_label.text = "" if selected.is_empty() else "Selected: %d   (%d light, %d heavy, %d farmers)" % [selected.size(), light, heavy, farm]
+	var units: int = 0
+	var farmers: int = 0
+	var oil: int = 0
+	for id in info:
+		var k: int = info[id][0]
+		if info[id][1] != my_slot:
+			continue
+		if k == 4:
+			oil += 1
+		elif k == 3:
+			farmers += 1
+			units += 1
+		elif k == 1 or k == 2:
+			units += 1
+	info_label.text = "Units  %d / %d\nFarmers  %d\n[color=#e3b341]Oil derricks  %d[/color]" % [units, Data.UNIT_CAP, farmers, oil]
+	unit_bar.value = units
 
 
 func _build_pause() -> void:
@@ -387,7 +612,7 @@ func _process(dt: float) -> void:
 
 	if my_slot >= 0 and my_slot < money.size():
 		money_label.text = "$ %d" % int(money[my_slot])
-	sel_label.text = ("Selected: %d" % selected.size()) if not selected.is_empty() else ""
+	_update_hud(dt)
 	var oil_count: Dictionary = {}
 	for oid in info:
 		if info[oid][0] == 4 and info[oid][1] >= 0:
@@ -465,6 +690,11 @@ func on_snapshot(snap: PackedFloat32Array, shots: PackedFloat32Array, money_p: P
 			_make_view(id, kind, owner)
 			views[id].position = p
 		targets[id] = p
+		if kind == 0 and owner == my_slot and info.has(id) and frac < float(info[id][2]) - 0.001:
+			var now: float = Time.get_ticks_msec() / 1000.0
+			if now - last_alert > 10.0 and msg_label != null:
+				last_alert = now
+				_msg("Your base is under attack!", Color(1.0, 0.4, 0.35))
 		info[id] = [kind, owner, frac]
 		if int(views[id].get_meta("owner", -99)) != owner:
 			_set_owner(id, owner)
@@ -474,6 +704,7 @@ func on_snapshot(snap: PackedFloat32Array, shots: PackedFloat32Array, money_p: P
 			var kd: int = info[id][0]
 			var bpos: Vector3 = views[id].position + Vector3(0, 1.5, 0)
 			if kd == 5:
+				_msg("A money field has run dry", Color(0.8, 0.8, 0.8))
 				_burst(bpos, 12, 0.6, 0.2, Color(1.0, 0.85, 0.2), 5.0, Vector3(0, -9, 0))
 			elif kd == 0:
 				_burst(bpos, 60, 1.0, 0.6, Color(1.0, 0.45, 0.1), 14.0, Vector3(0, -8, 0))
@@ -610,6 +841,14 @@ func _make_view(id: int, kind: int, owner: int) -> void:
 
 func _set_owner(id: int, owner: int) -> void:
 	var v: Node3D = views[id]
+	var prev: int = int(v.get_meta("owner", -1))
+	if info.has(id) and info[id][0] == 4 and msg_label != null:
+		if owner == my_slot:
+			_msg("Oil derrick captured", Color(0.5, 1.0, 0.5))
+		elif prev == my_slot:
+			_msg("Oil derrick lost!", Color(1.0, 0.45, 0.4))
+		elif owner >= 0:
+			_msg("%s captured an oil derrick" % str(Net.slots[owner]["country"]), Color(1.0, 0.85, 0.3))
 	v.set_meta("owner", owner)
 	var mat: StandardMaterial3D = v.get_meta("disc")
 	mat.albedo_color = Data.PLAYER_COLORS[owner] if owner >= 0 else Color(0.6, 0.6, 0.6)
@@ -995,6 +1234,8 @@ func _unhandled_input(ev: InputEvent) -> void:
 					selected[id] = true
 		elif ev.keycode == KEY_R:
 			_train(2)
+		elif ev.keycode == KEY_G:
+			_select_kinds([3])
 		elif ev.keycode == KEY_ESCAPE:
 			pause_layer.visible = not pause_layer.visible
 
