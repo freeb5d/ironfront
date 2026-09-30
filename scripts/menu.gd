@@ -481,6 +481,9 @@ func _refresh() -> void:
 		if s["type"] == "human":
 			who.text = str(s["name"]) + ("  (host)" if s["peer"] == 1 else "")
 			row.add_child(who)
+			var pad: Control = Control.new()
+			pad.custom_minimum_size = Vector2(150, 0)
+			row.add_child(pad)
 		elif multiplayer.is_server():
 			row.add_child(who)
 			var tb: OptionButton = OptionButton.new()
@@ -493,6 +496,9 @@ func _refresh() -> void:
 		else:
 			who.text = str(s["type"]).capitalize()
 			row.add_child(who)
+			var pad2: Control = Control.new()
+			pad2.custom_minimum_size = Vector2(150, 0)
+			row.add_child(pad2)
 
 		if s["type"] == "human" or s["type"] == "bot":
 			var cb: OptionButton = OptionButton.new()
