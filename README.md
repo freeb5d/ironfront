@@ -31,7 +31,10 @@ Bleeding-edge builds of every commit are also available as artifacts on the [Act
 
 - Fullscreen, Generals-style interface: command bar, framed minimap, money plate, event messages
 - 5 nations, 8 players, LAN / direct-IP multiplayer, bots with Easy / Normal / Hard difficulty
-- Economy with farmers, $ fields and capturable oil derricks
+- Base building like the classics: train a **Builder** (`B`), select it and construct a Power Plant (`Y`), Supply Depot (`U`), Barracks (`I`), War Factory (`O`) and Turrets (`P`)
+- Power management: buildings draw power, and on low power production slows down and turrets shut off
+- Tech and production queues: Barracks speed up infantry, the War Factory unlocks heavy vehicles (and needs a Barracks first)
+- Economy with farmers, $ fields (a Supply Depot shortens the trips) and capturable oil derricks
 - Real-time combat with projectiles, explosions, positional sound effects
 - Veterancy: units earn ranks (veteran, elite, heroic) from kills and get stronger, heroic units self-repair
 - Commander points and powers (per nation): targeted strike, reinforcements, field repair
@@ -95,6 +98,9 @@ Destroy every enemy **headquarters**. A player whose HQ falls is eliminated and 
 | **Ctrl** + right click | Attack-move (fight everything on the way) |
 | **X** | Stop |
 | **H** / **Home** | Jump to your base |
+| **B** | Train a builder, then select it to see the build menu |
+| **Y U I O P** | Place Power Plant / Supply Depot / Barracks / War Factory / Turret (builder selected) |
+| Right click an unfinished building | Send builders to help construct it |
 | **Z** / **C** / **V** | Commander powers: strike (then click the map) / reinforcements / field repair |
 | **Esc** | Pause menu and settings |
 
@@ -121,7 +127,8 @@ tests/smoke.gd   headless full-match test run by CI
 ## Roadmap
 
 - [x] Veterancy and commander powers
-- [ ] Base building with builders, power plants and a tech tree
+- [x] Base building with builders, power and production queues
+- [ ] More buildings and upgrades (tech tree, strategy centre)
 - [ ] Superweapons and upgrades
 - [ ] Challenge ladder (single-player boss battles)
 - [ ] Garrisonable buildings
