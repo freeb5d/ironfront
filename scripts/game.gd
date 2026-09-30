@@ -210,7 +210,7 @@ func _build_world() -> void:
 
 func _make_ground_texture() -> ImageTexture:
 	# desert map: light edge strips, a sunken dark centre and a dark road across the middle
-	var n: int = 256
+	var n: int = 384
 	var img: Image = Image.create(n, n, false, Image.FORMAT_RGB8)
 	var noise: FastNoiseLite = FastNoiseLite.new()
 	noise.seed = 11
@@ -583,11 +583,6 @@ func _build_pause() -> void:
 	resume.custom_minimum_size = Vector2(300, 50)
 	resume.pressed.connect(func(): pause_layer.visible = false)
 	v.add_child(resume)
-	var fs: Button = Button.new()
-	fs.text = "TOGGLE FULLSCREEN (F11)"
-	fs.custom_minimum_size = Vector2(300, 50)
-	fs.pressed.connect(Net.toggle_fullscreen)
-	v.add_child(fs)
 	v.add_child(UI.settings_box(_apply_settings))
 	var keys: Label = UI.label("Hotkeys:  Ctrl+1..9 set group,  1..9 select (twice = jump)  |  H base  |  X stop  |  Ctrl+right-click attack-move  |  double-click = all of that type  |  F army  |  G farmers", 13, Color("8b98a9"))
 	keys.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -796,21 +791,21 @@ func _make_view(id: int, kind: int, owner: int) -> void:
 
 	var country: String = Net.slots[owner]["country"] if owner >= 0 else ""
 	var col: Color = Data.PLAYER_COLORS[owner] if owner >= 0 else Color(0.6, 0.6, 0.6)
-	var bar_w: float = 2.2
-	var bar_y: float = 3.6
-	var ring_r: float = 1.9
-	var disc_r: float = 1.3
+	var bar_w: float = 3.0
+	var bar_y: float = 5.2
+	var ring_r: float = 2.7
+	var disc_r: float = 1.9
 	var model_path: String = ""
 	var by_h: bool = true
 	var size: float = 2.4
 	if kind == 0:
 		model_path = Data.VISUALS[country]["hq"]
 		by_h = false
-		size = 13.0
-		bar_w = 9.0
-		bar_y = 9.0
-		ring_r = 8.5
-		disc_r = 8.5
+		size = 15.0
+		bar_w = 11.0
+		bar_y = 11.0
+		ring_r = 10.0
+		disc_r = 10.0
 	elif kind == 3:
 		model_path = Data.FARMER_VISUAL[0]
 		by_h = Data.FARMER_VISUAL[1]
@@ -829,10 +824,10 @@ func _make_view(id: int, kind: int, owner: int) -> void:
 		by_h = v[1]
 		size = v[2]
 		if not by_h:
-			bar_w = 3.4
-			bar_y = 3.8
-			ring_r = 3.4
-			disc_r = 2.8
+			bar_w = 4.8
+			bar_y = 5.2
+			ring_r = 4.6
+			disc_r = 3.9
 
 	# team-coloured ground disc so ownership is readable whatever the model colours are
 	var disc: MeshInstance3D = MeshInstance3D.new()
@@ -951,7 +946,7 @@ func _static_visual(pivot: Node3D, kind: int) -> void:
 			bx.position = offs[k] + Vector3(0, 0.45, 0)
 			bx.rotation.y = 0.6 * k
 			pivot.add_child(bx)
-		pivot.add_child(_label3d("$", Color(0.3, 1.0, 0.4), 4.0, 0.03))
+		pivot.add_child(_label3d("$", Color(0.3, 1.0, 0.4), 5.0, 0.05))
 	else:
 		# oil derrick: dark base, tower, crossbar, barrels and an OIL tag
 		var steel: StandardMaterial3D = StandardMaterial3D.new()
@@ -1174,6 +1169,8 @@ func _apply_settings() -> void:
 
 func _group_key(n: int, assign: bool) -> void:
 	if assign:
+		if selected.is_empty():
+			return
 		groups[n] = selected.keys()
 		_msg("Group %d set (%d units)" % [n, selected.size()], Color(0.7, 0.85, 1.0))
 		return
@@ -1339,14 +1336,14 @@ func _spawn_shot(shooter: int, from: Vector3, to: Vector3, kind: int) -> void:
 	var b: Vector3 = Vector3(to.x, 1.4, to.z)
 	var node: MeshInstance3D = MeshInstance3D.new()
 	var bm: BoxMesh = BoxMesh.new()
-	bm.size = Vector3(0.25, 0.25, 1.8) if heavy else Vector3(0.08, 0.08, 1.2)
+	bm.size = Vector3(0.45, 0.45, 3.0) if heavy else Vector3(0.18, 0.18, 2.2)
 	node.mesh = bm
 	node.material_override = _fx_material(Color(1.0, 0.65, 0.15) if heavy else Color(1.0, 0.95, 0.5))
 	add_child(node)
 	node.position = a
 	node.look_at(b)
 	projectiles.append({"n": node, "a": a, "b": b, "t": 0.0, "d": maxf(0.04, a.distance_to(b) / (40.0 if heavy else 85.0)), "heavy": heavy})
-	_burst(a, 6 if heavy else 3, 0.12, 0.25 if heavy else 0.12, Color(1.0, 0.85, 0.3), 3.0, Vector3.ZERO)
+	_burst(a, 8 if heavy else 5, 0.14, 0.5 if heavy else 0.28, Color(1.0, 0.9, 0.35), 4.0, Vector3.ZERO)
 
 
 func _burst(pos: Vector3, amount: int, life: float, size: float, col: Color, vel: float, grav: Vector3) -> void:
@@ -1385,7 +1382,7 @@ func _update_projectiles(dt: float) -> void:
 		p["n"].position = p["a"].lerp(p["b"], f)
 		if f >= 1.0:
 			var heavy: bool = p["heavy"]
-			_burst(p["b"], 14 if heavy else 6, 0.4, 0.22 if heavy else 0.1, Color(1.0, 0.5, 0.12), 6.0 if heavy else 3.5, Vector3(0, -12, 0))
+			_burst(p["b"], 18 if heavy else 8, 0.45, 0.4 if heavy else 0.22, Color(1.0, 0.5, 0.12), 7.0 if heavy else 4.0, Vector3(0, -12, 0))
 			p["n"].queue_free()
 			projectiles.remove_at(i)
 		i -= 1

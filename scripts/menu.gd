@@ -207,7 +207,7 @@ func _card(cname: String, selected: bool) -> Control:
 	vb.add_child(sp)
 	for u in d["units"]:
 		vb.add_child(UI.label(str(u["name"]), 18, UI.TEXT))
-		vb.add_child(UI.label("$%d   HP %d   DMG %d   RNG %d" % [u["cost"], u["hp"], u["dmg"], u["rng"]], 13, Color("8b98a9")))
+		vb.add_child(UI.label("$%d  HP %d  DMG %d  RNG %d" % [u["cost"], u["hp"], u["dmg"], u["rng"]], 12, Color("8b98a9")))
 
 	b.toggled.connect(func(on: bool):
 		if on:

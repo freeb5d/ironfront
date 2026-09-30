@@ -39,6 +39,8 @@ static func make_theme() -> Theme:
 	t.set_color("font_color", "LineEdit", TEXT)
 	t.set_color("font_color", "Label", TEXT)
 	t.set_color("default_color", "RichTextLabel", TEXT)
+	t.set_stylebox("background", "ProgressBar", box(Color(0.05, 0.08, 0.12), BORDER, 2, 4))
+	t.set_stylebox("fill", "ProgressBar", box(ACCENT, Color(0, 0, 0, 0), 0, 4))
 	t.set_color("font_color", "CheckButton", TEXT)
 	t.set_color("font_hover_color", "CheckButton", ACCENT)
 	t.set_color("font_pressed_color", "CheckButton", TEXT)

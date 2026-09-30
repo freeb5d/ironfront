@@ -125,7 +125,7 @@ func _spawn_hq(slot: int) -> void:
 	e.pos = hq_pos[slot]
 	e.hp = HQ_HP
 	e.max_hp = HQ_HP
-	e.radius = 6.0
+	e.radius = 7.5
 	ents[e.id] = e
 	hq_ids[slot] = e.id
 
@@ -146,7 +146,7 @@ func spawn_unit(slot: int, idx: int) -> Ent:
 	e.rng = float(st["rng"])
 	e.spd = float(st["spd"])
 	e.cd = float(st["cd"])
-	e.radius = 2.0 if idx == 1 else 1.0
+	e.radius = 3.0 if idx == 1 else 1.6
 	ents[e.id] = e
 	return e
 
