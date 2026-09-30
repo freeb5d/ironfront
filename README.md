@@ -101,13 +101,23 @@ tests/smoke.gd   headless full-match test run by CI
 - [ ] Teams / alliances
 - [ ] Nation special powers
 - [ ] Fog of war
-- [ ] Final art, animation and sound
+- [ ] More unit types and animations, sound
 - [ ] Matchmaking / NAT punch-through for easy online play
 - [ ] Localisation
 
 ## Contributing
 
 Issues and pull requests are welcome. Open the project in [Godot 4.3](https://godotengine.org/download) (`project.godot`) to work on it locally.
+
+## Credits
+
+All art is CC0 (public domain); thanks to the creators:
+
+- Soldiers, tanks and trucks: [Quaternius](https://quaternius.com) via [Poly Pizza](https://poly.pizza)
+- HQ buildings, containers, tanks and water towers: [Kenney](https://kenney.nl) *City Kit (Industrial)*
+- Trees, rocks, tents and flags: [Kenney](https://kenney.nl) *Mini Forest*
+
+Licence files are kept next to the assets in `assets/`.
 
 ## Legal
 
