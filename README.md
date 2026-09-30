@@ -42,6 +42,7 @@ Bleeding-edge builds of every commit are also available as artifacts on the [Act
 - Commander points and powers (per nation): targeted strike, reinforcements, field repair
 - Control groups, double-click select, attack-move, scoreboard at the end of each match
 - Match options in the lobby: starting money, game speed, unit limit, starting army, teams (free for all, 2 teams of 4, 4 teams of 2), commander powers on/off, bot difficulty
+- Gameplay tips for newcomers (can be switched off) and hover tooltips on every command tile
 - Settings (saved between sessions): volume, fullscreen, VSync, interface scale, FPS counter, shadows, reduced effects for weak computers, edge scrolling, camera and zoom speed, always-visible health bars
 
 ## Nations
@@ -60,6 +61,7 @@ You choose your nation on a dedicated selection screen before every match (and c
 
 ## Game modes
 
+- **Challenge** — a 5-stage single-player ladder (Border Skirmish, Oil Rush, Two Fronts, Allied Offensive, The Final Stand). Each stage unlocks the next; progress is saved per nation.
 - **Offline** — you against 7 bots with random nations.
 - **Multiplayer (LAN / direct IP)** — up to 8 humans. The host decides for each slot whether it is *Open*, a *Bot*, or *Closed*. Empty slots can be filled with bots.
 
@@ -134,7 +136,7 @@ tests/smoke.gd   headless full-match test run by CI
 - [x] Base building with builders, power and production queues
 - [ ] More buildings and upgrades (tech tree, strategy centre)
 - [x] Superweapons and upgrades
-- [ ] Challenge ladder (single-player boss battles)
+- [x] Challenge ladder (single-player stages)
 - [ ] Garrisonable buildings
 - [ ] Pathfinding and unit collision
 - [ ] Teams / alliances
