@@ -35,6 +35,12 @@ jobs:
           grep -q "main_visible=true" auto.log
           if grep -q "SCRIPT ERROR" auto.log; then exit 1; fi
 
+      - name: Autotest offline (challenge stage, no network socket)
+        run: |
+          timeout 90 godot --headless --path . -- --autotest --offline 2>&1 | tee off.log || true
+          grep -q "AUTOTEST OK" off.log
+          if grep -qiE "SCRIPT ERROR|rpc" off.log; then echo "errors in offline run"; grep -iE "SCRIPT ERROR|rpc" off.log | head; exit 1; fi
+
       - name: Visual check (software OpenGL, takes screenshots of every screen)
         continue-on-error: true
         run: |

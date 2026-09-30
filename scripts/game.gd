@@ -946,6 +946,8 @@ func _process(dt: float) -> void:
 func _physics_process(dt: float) -> void:
 	if sim == null or not running:
 		return
+	if Net.offline and pause_layer.visible:
+		return # single-player: the pause menu really pauses the game
 	sim.step(dt * float(Net.options.get("speed", 1.0)))
 	snap_timer += dt
 	if snap_timer >= 1.0 / SNAP_HZ:
@@ -1745,6 +1747,21 @@ func srv_upgrade(idx: int) -> void:
 	var slot: int = _slot_of(multiplayer.get_remote_sender_id())
 	if slot >= 0:
 		sim.cmd_upgrade(slot, idx)
+
+
+## Right-click on the minimap: send the selected units there (Ctrl = attack-move).
+func minimap_order(pos: Vector3) -> void:
+	if selected.is_empty() or my_slot < 0:
+		return
+	var ids: Array = selected.keys()
+	if ids.size() > 200:
+		ids = ids.slice(0, 200)
+	var amove: bool = Input.is_key_pressed(KEY_CTRL)
+	if multiplayer.is_server():
+		if sim != null:
+			sim.cmd_move(my_slot, ids, pos, amove)
+	else:
+		srv_move.rpc_id(1, ids, pos, amove)
 
 
 func _cast_assist(bid: int) -> void:

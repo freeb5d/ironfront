@@ -12,6 +12,7 @@ const PORT := 24680
 var slots: Array = [] # {type: open|bot|closed|human, peer: int, name: String, country: String}
 var seed_value: int = 0
 var in_game: bool = false
+var offline: bool = false # single-player: no network socket is opened at all
 var my_name: String = "Player"
 var my_country: String = "USA"
 
@@ -138,11 +139,11 @@ func save_settings() -> void:
 
 
 ## Starts stage `stage` of the challenge ladder as `nation` (offline, no lobby).
-func start_challenge(stage: int, nation: String) -> void:
+func start_challenge(stage: int, nation: String) -> bool:
 	var st: Dictionary = Data.CHALLENGE[stage]
 	my_country = nation
-	if host_game(my_name) != OK:
-		return
+	if host_game(my_name, true) != OK:
+		return false
 	challenge = {"active": true, "stage": stage, "nation": nation}
 	for i in range(1, slots.size()):
 		slots[i]["type"] = "closed"
@@ -154,6 +155,7 @@ func start_challenge(stage: int, nation: String) -> void:
 	options["teams"] = "custom"
 	options["bot_money"] = st["bot_money"]
 	start_game()
+	return true
 
 
 func challenge_complete(stage: int) -> void:
@@ -196,6 +198,7 @@ func toggle_fullscreen() -> void:
 func reset() -> void:
 	slots.clear()
 	in_game = false
+	offline = false
 	challenge["active"] = false
 
 
@@ -207,13 +210,17 @@ func _default_slots() -> Array:
 	return out
 
 
-func host_game(pname: String) -> int:
+func host_game(pname: String, is_offline: bool = false) -> int:
 	my_name = pname
-	var peer: ENetMultiplayerPeer = ENetMultiplayerPeer.new()
-	var err: int = peer.create_server(PORT, Data.MAX_SLOTS)
-	if err != OK:
-		return err
-	multiplayer.multiplayer_peer = peer
+	offline = is_offline
+	if is_offline:
+		multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
+	else:
+		var peer: ENetMultiplayerPeer = ENetMultiplayerPeer.new()
+		var err: int = peer.create_server(PORT, Data.MAX_SLOTS)
+		if err != OK:
+			return err
+		multiplayer.multiplayer_peer = peer
 	slots = _default_slots()
 	slots[0] = {"type": "human", "peer": 1, "name": pname, "country": my_country}
 	lobby_changed.emit()

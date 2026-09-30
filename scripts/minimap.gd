@@ -51,6 +51,10 @@ func _draw() -> void:
 func _gui_input(ev: InputEvent) -> void:
 	if game == null:
 		return
+	if ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_RIGHT and ev.pressed:
+		game.minimap_order(Vector3(ev.position.x / size.x * WORLD - WORLD * 0.5, 0.0, ev.position.y / size.y * WORLD - WORLD * 0.5))
+		accept_event()
+		return
 	var pressed: bool = false
 	if ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_LEFT and ev.pressed:
 		pressed = true

@@ -71,7 +71,12 @@ func _ready() -> void:
 		_resume_challenge.call_deferred()
 
 	if "--autotest" in OS.get_cmdline_user_args():
-		_run_autotest()
+		if "--offline" in OS.get_cmdline_user_args():
+			print("AUTOTEST MENU main_visible=%s" % screens["main"].visible)
+			Net.my_name = "Commander"
+			Net.start_challenge.call_deferred(0, "USA")
+		else:
+			_run_autotest()
 
 
 func _run_autotest() -> void:
@@ -386,7 +391,7 @@ func _confirm() -> void:
 	Net.my_country = chosen
 	match pending:
 		OFFLINE:
-			if Net.host_game(_pname()) != OK:
+			if Net.host_game(_pname(), true) != OK:
 				_show("main")
 				msg.text = "Could not start (is the network port already in use?)"
 				return
@@ -486,7 +491,9 @@ func _refresh_challenge() -> void:
 
 func _start_stage(i: int) -> void:
 	Net.my_name = _pname()
-	Net.start_challenge(i, chosen)
+	if not Net.start_challenge(i, chosen):
+		msg.text = "Could not start the stage."
+		_show("main")
 
 
 func _resume_challenge() -> void:
@@ -587,7 +594,12 @@ func _refresh() -> void:
 				ob2.selected = at
 		ob2.disabled = not multiplayer.is_server()
 	wait_label.visible = not multiplayer.is_server()
-	lobby_info.text = "Friends join with your address: " + ", ".join(_local_ips()) + "  (UDP %d)" % Net.PORT if multiplayer.is_server() else "Connected. Pick your nation below."
+	if Net.offline:
+		lobby_info.text = "Skirmish - pick your opponents, adjust the match options and press START."
+	elif multiplayer.is_server():
+		lobby_info.text = "Friends join with your address: " + ", ".join(_local_ips()) + "  (UDP %d)" % Net.PORT
+	else:
+		lobby_info.text = "Connected. Pick your nation below."
 	for c in rows.get_children():
 		rows.remove_child(c)
 		c.queue_free()
