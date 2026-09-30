@@ -34,9 +34,11 @@ func _ready() -> void:
 	Net.game_started.connect(_on_started)
 	Net.connection_failed.connect(_on_connect_failed)
 	Net.server_lost.connect(_on_server_lost)
+	_show("main")
 	_refresh()
 
 	if "--autotest" in OS.get_cmdline_user_args():
+		print("AUTOTEST MENU main_visible=%s" % screens["main"].visible)
 		pending = OFFLINE
 		chosen = "USA"
 		_confirm.call_deferred()
