@@ -62,7 +62,7 @@ You choose your nation on a dedicated selection screen before every match (and c
 ## Game modes
 
 - **Challenge** — a 5-stage single-player ladder (Border Skirmish, Oil Rush, Two Fronts, Allied Offensive, The Final Stand). Each stage unlocks the next; progress is saved per nation.
-- **Offline** — you against 7 bots with random nations.
+- **Offline** — a skirmish against up to 7 bots with random nations. Single-player modes (Offline and Challenge) open no network port, so there is no firewall prompt, and the pause menu really pauses the game.
 - **Multiplayer (LAN / direct IP)** — up to 8 humans. The host decides for each slot whether it is *Open*, a *Bot*, or *Closed*. Empty slots can be filled with bots.
 
 ### Hosting a match
@@ -98,6 +98,7 @@ Destroy every enemy **headquarters**. A player whose HQ falls is eliminated and 
 | Minimap click / drag | Jump the camera |
 | **F11** | Toggle fullscreen |
 | **Ctrl + 1..9** / **1..9** | Set / recall a control group (press twice to jump the camera there) |
+| Right click the minimap | Send the selected units there (Ctrl = attack-move) |
 | Double-click a unit | Select every visible unit of that type |
 | **Ctrl** + right click | Attack-move (fight everything on the way) |
 | **X** | Stop |
