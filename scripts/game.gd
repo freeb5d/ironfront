@@ -149,6 +149,12 @@ func _build_world() -> void:
 
 
 
+func _panel(root: Control) -> PanelContainer:
+	var p: PanelContainer = PanelContainer.new()
+	root.add_child(p)
+	return p
+
+
 func _build_hud() -> void:
 	var layer: CanvasLayer = CanvasLayer.new()
 	add_child(layer)
