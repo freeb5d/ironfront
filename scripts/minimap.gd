@@ -19,7 +19,10 @@ func _to_map(w: Vector3) -> Vector2:
 
 func _draw() -> void:
 	if bg != null:
-		draw_texture_rect_region(bg, Rect2(Vector2.ZERO, size), Rect2(8, 8, 240, 240))
+		# the ground texture covers -160..160, the playable map is -150..150
+		var tw: float = float(bg.get_width())
+		var margin: float = tw * 10.0 / 320.0
+		draw_texture_rect_region(bg, Rect2(Vector2.ZERO, size), Rect2(margin, margin, tw - 2.0 * margin, tw - 2.0 * margin))
 	else:
 		draw_rect(Rect2(Vector2.ZERO, size), Color(0.09, 0.15, 0.1))
 	if game != null:
