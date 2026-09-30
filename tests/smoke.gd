@@ -18,7 +18,7 @@ func _initialize() -> void:
 	sim.setup(slots, 12345)
 
 	var ok: bool = true
-	for path in ["res://scripts/net.gd", "res://scripts/ui.gd", "res://scripts/minimap.gd", "res://scripts/menu.gd", "res://scripts/game.gd", "res://scripts/sfx.gd"]:
+	for path in ["res://scripts/net.gd", "res://scripts/ui.gd", "res://scripts/minimap.gd", "res://scripts/menu.gd", "res://scripts/game.gd", "res://scripts/sfx.gd", "res://scripts/models.gd", "res://scripts/portrait.gd", "res://scripts/turntable.gd"]:
 		var sc = load(path)
 		if sc == null or not sc.can_instantiate():
 			printerr("script failed to compile: " + path)

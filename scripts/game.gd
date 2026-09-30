@@ -343,18 +343,39 @@ func _sb(fill: Color, border: Color, bw: int, radius: int, margin: int) -> Style
 	return sb
 
 
-func _tile(text: String, cb: Callable) -> Button:
+## A command tile: live 3D portrait on top, name and price below. Call _tile_ready() once it is in the tree.
+func _tile(text: String, cb: Callable, entries: Array = []) -> Button:
 	var b: Button = Button.new()
-	b.text = text
-	b.custom_minimum_size = Vector2(104, 76)
-	b.add_theme_font_size_override("font_size", 15)
+	b.custom_minimum_size = Vector2(114, 88)
 	b.pressed.connect(cb)
+	var vb: VBoxContainer = VBoxContainer.new()
+	vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vb.alignment = BoxContainer.ALIGNMENT_CENTER
+	vb.add_theme_constant_override("separation", 0)
+	b.add_child(vb)
+	vb.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	if not entries.is_empty():
+		var p: Portrait = Portrait.new()
+		vb.add_child(p)
+		b.set_meta("portrait", p)
+		b.set_meta("entries", entries)
+	var parts: PackedStringArray = text.split("\n")
+	for i in parts.size():
+		var l: Label = UI.label(parts[i], 16 if i == 0 else 14, UI.TEXT if i == 0 else Color("b9c6d6"))
+		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		vb.add_child(l)
 	return b
+
+
+func _tile_ready(b: Button) -> void:
+	if b.has_meta("portrait"):
+		var p: Portrait = b.get_meta("portrait")
+		p.setup(b.get_meta("entries"), Vector2i(104, 46), 0.5)
 
 
 func _empty_tile() -> PanelContainer:
 	var p: PanelContainer = PanelContainer.new()
-	p.custom_minimum_size = Vector2(104, 76)
+	p.custom_minimum_size = Vector2(114, 88)
 	p.add_theme_stylebox_override("panel", _sb(Color(0.05, 0.08, 0.12), Color(0.16, 0.22, 0.30), 2, 4, 4))
 	return p
 
@@ -448,13 +469,20 @@ func _build_hud_v2() -> void:
 		var country: String = Net.slots[my_slot]["country"]
 		for idx in 3:
 			var st: Dictionary = Data.unit(country, idx)
-			var b: Button = _tile("%s\n$%d\n[%s]" % [st["name"], st["cost"], ["Q", "E", "R"][idx]], _train.bind(idx))
+			var vis: Array = Data.FARMER_VISUAL if idx == 2 else Data.VISUALS[country]["units"][idx]
+			var b: Button = _tile("%s\n$%d  [%s]" % [st["name"], st["cost"], ["Q", "E", "R"][idx]], _train.bind(idx), [[vis[0], vis[1], 3.2 if vis[1] else 5.0]])
 			grid.add_child(b)
+			_tile_ready(b)
 			train_buttons.append(b)
 			used += 1
-	grid.add_child(_tile("Army\n\n[F]", _select_kinds.bind([1, 2])))
-	grid.add_child(_tile("Farmers\n\n[G]", _select_kinds.bind([3])))
-	used += 2
+		var army_vis: Array = Data.VISUALS[country]["units"][0]
+		var t_army: Button = _tile("Select army\n[F]", _select_kinds.bind([1, 2]), [[army_vis[0], true, 3.2]])
+		grid.add_child(t_army)
+		_tile_ready(t_army)
+		var t_farm: Button = _tile("Select farmers\n[G]", _select_kinds.bind([3]), [[Data.FARMER_VISUAL[0], true, 3.2]])
+		grid.add_child(t_farm)
+		_tile_ready(t_farm)
+		used += 2
 	for k in range(used, 12):
 		grid.add_child(_empty_tile())
 

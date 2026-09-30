@@ -10,6 +10,24 @@ const ACCENT := Color("e3b341")
 const TEXT := Color("e6edf3")
 
 
+static var _fonts: Dictionary = {}
+
+
+## Rajdhani (SIL Open Font License) in four weights.
+static func font(weight: String) -> Font:
+	if not _fonts.has(weight):
+		var file: String = {"regular": "Regular", "medium": "Medium", "semibold": "SemiBold", "bold": "Bold"}[weight]
+		_fonts[weight] = load("res://assets/fonts/Rajdhani-%s.ttf" % file)
+	return _fonts[weight]
+
+
+static func spaced(weight: String, spacing: int) -> Font:
+	var fv: FontVariation = FontVariation.new()
+	fv.base_font = font(weight)
+	fv.spacing_glyph = spacing
+	return fv
+
+
 static func box(fill: Color, border: Color = Color(0, 0, 0, 0), bw: int = 0, radius: int = 8) -> StyleBoxFlat:
 	var s: StyleBoxFlat = StyleBoxFlat.new()
 	s.bg_color = fill
@@ -22,12 +40,19 @@ static func box(fill: Color, border: Color = Color(0, 0, 0, 0), bw: int = 0, rad
 
 static func make_theme() -> Theme:
 	var t: Theme = Theme.new()
-	t.default_font_size = 18
+	t.default_font = font("medium")
+	t.default_font_size = 20
 	for cls in ["Button", "OptionButton"]:
-		t.set_stylebox("normal", cls, box(PANEL, BORDER, 2))
-		t.set_stylebox("hover", cls, box(Color("1c2430"), ACCENT, 2))
-		t.set_stylebox("pressed", cls, box(Color("0d1117"), ACCENT, 3))
-		t.set_stylebox("disabled", cls, box(Color("10141a"), Color("1c2430"), 2))
+		t.set_font("font", cls, font("semibold"))
+		t.set_font_size("font_size", cls, 21)
+		var hover: StyleBoxFlat = box(Color(0.13, 0.19, 0.28, 0.96), ACCENT, 1, 4)
+		hover.border_width_left = 6
+		var pressed: StyleBoxFlat = box(Color(0.05, 0.08, 0.12, 0.98), ACCENT, 1, 4)
+		pressed.border_width_left = 6
+		t.set_stylebox("normal", cls, box(Color(0.06, 0.09, 0.14, 0.82), Color(0.28, 0.37, 0.50, 0.85), 1, 4))
+		t.set_stylebox("hover", cls, hover)
+		t.set_stylebox("pressed", cls, pressed)
+		t.set_stylebox("disabled", cls, box(Color("10141a"), Color("1c2430"), 1, 4))
 		t.set_stylebox("focus", cls, StyleBoxEmpty.new())
 		t.set_color("font_color", cls, TEXT)
 		t.set_color("font_hover_color", cls, ACCENT)
@@ -129,4 +154,6 @@ static func label(text: String, size: int = 18, color: Color = TEXT) -> Label:
 	l.text = text
 	l.add_theme_font_size_override("font_size", size)
 	l.add_theme_color_override("font_color", color)
+	if size >= 26:
+		l.add_theme_font_override("font", font("bold"))
 	return l
