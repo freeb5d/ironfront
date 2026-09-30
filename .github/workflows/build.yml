@@ -26,6 +26,13 @@ jobs:
         run: |
           godot --headless --path . --script tests/smoke.gd 2>&1 | tee smoke.log
           grep -q "SMOKE OK" smoke.log
+          if grep -q "SCRIPT ERROR" smoke.log; then exit 1; fi
+
+      - name: Autotest (boots menu, starts a match, exercises HUD and input)
+        run: |
+          timeout 90 godot --headless --path . -- --autotest 2>&1 | tee auto.log || true
+          grep -q "AUTOTEST OK" auto.log
+          if grep -q "SCRIPT ERROR" auto.log; then exit 1; fi
 
       - name: Export Windows
         run: |

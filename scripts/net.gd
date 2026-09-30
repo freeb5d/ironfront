@@ -13,6 +13,7 @@ var slots: Array = [] # {type: open|bot|closed|human, peer: int, name: String, c
 var seed_value: int = 0
 var in_game: bool = false
 var my_name: String = "Player"
+var my_country: String = "USA"
 
 
 func _ready() -> void:
@@ -20,6 +21,18 @@ func _ready() -> void:
 	multiplayer.connected_to_server.connect(_on_connected)
 	multiplayer.connection_failed.connect(func(): connection_failed.emit())
 	multiplayer.server_disconnected.connect(func(): server_lost.emit())
+
+
+func _input(ev: InputEvent) -> void:
+	if ev is InputEventKey and ev.pressed and not ev.echo and ev.keycode == KEY_F11:
+		toggle_fullscreen()
+
+
+func toggle_fullscreen() -> void:
+	if DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+	else:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 
 
 func reset() -> void:
@@ -43,7 +56,7 @@ func host_game(pname: String) -> int:
 		return err
 	multiplayer.multiplayer_peer = peer
 	slots = _default_slots()
-	slots[0] = {"type": "human", "peer": 1, "name": pname, "country": slots[0]["country"]}
+	slots[0] = {"type": "human", "peer": 1, "name": pname, "country": my_country}
 	lobby_changed.emit()
 	return OK
 
@@ -59,17 +72,18 @@ func join_game(ip: String, pname: String) -> int:
 
 
 func _on_connected() -> void:
-	srv_hello.rpc_id(1, my_name)
+	srv_hello.rpc_id(1, my_name, my_country)
 
 
 @rpc("any_peer", "reliable")
-func srv_hello(pname: String) -> void:
+func srv_hello(pname: String, country: String) -> void:
 	if not multiplayer.is_server():
 		return
 	var sender: int = multiplayer.get_remote_sender_id()
 	for i in slots.size():
 		if slots[i]["type"] == "open" and not in_game:
-			slots[i] = {"type": "human", "peer": sender, "name": pname.left(16), "country": slots[i]["country"]}
+			var c: String = country if Data.COUNTRIES.has(country) else slots[i]["country"]
+			slots[i] = {"type": "human", "peer": sender, "name": pname.left(16), "country": c}
 			_broadcast()
 			return
 	multiplayer.multiplayer_peer.disconnect_peer(sender)

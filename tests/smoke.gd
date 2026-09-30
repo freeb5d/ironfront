@@ -12,6 +12,11 @@ func _initialize() -> void:
 	sim.setup(slots, 12345)
 
 	var ok: bool = true
+	for path in ["res://scripts/net.gd", "res://scripts/ui.gd", "res://scripts/minimap.gd", "res://scripts/menu.gd", "res://scripts/game.gd"]:
+		var sc = load(path)
+		if sc == null or not sc.can_instantiate():
+			printerr("script failed to compile: " + path)
+			ok = false
 	if sim.ents.size() != 8 * 5:
 		printerr("expected 40 starting entities, got %d" % sim.ents.size())
 		ok = false

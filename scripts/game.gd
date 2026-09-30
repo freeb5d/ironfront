@@ -27,9 +27,11 @@ var zoom: float = 60.0
 var shot_mesh: ImmediateMesh
 
 var money_label: Label
-var players_label: Label
+var sel_label: Label
+var players_label: RichTextLabel
 var status_label: Label
-var help_label: Label
+var minimap: MiniMap
+var pause_layer: CanvasLayer
 var train_buttons: Array = []
 var drag_rect: ColorRect
 var dragging: bool = false
@@ -54,6 +56,23 @@ func _ready() -> void:
 		started_at = Time.get_ticks_msec() / 1000.0
 	else:
 		srv_ready.rpc_id(1)
+	if "--autotest" in OS.get_cmdline_user_args():
+		get_tree().create_timer(6.0).timeout.connect(_autotest_finish)
+
+
+func _autotest_finish() -> void:
+	# exercise the same code paths real input uses
+	for id in info:
+		if info[id][1] == my_slot and info[id][0] != 0:
+			selected[id] = true
+	_train(0)
+	_train(1)
+	_right_click(Vector2(640, 360))
+	_finish_drag(Vector2(100, 100))
+	pause_layer.visible = true
+	await get_tree().create_timer(2.0).timeout
+	print("AUTOTEST OK views=%d" % views.size())
+	get_tree().quit(0)
 
 
 @rpc("any_peer", "reliable")
@@ -118,51 +137,142 @@ func _build_world() -> void:
 	add_child(sm)
 
 
+func _panel(root: Control) -> PanelContainer:
+	var p: PanelContainer = PanelContainer.new()
+	root.add_child(p)
+	return p
+
+
 func _build_hud() -> void:
-	var hud: CanvasLayer = CanvasLayer.new()
-	add_child(hud)
+	var layer: CanvasLayer = CanvasLayer.new()
+	add_child(layer)
+	var root: Control = Control.new()
+	root.theme = UI.make_theme()
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(root)
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
-	money_label = Label.new()
-	money_label.position = Vector2(16, 10)
-	money_label.add_theme_font_size_override("font_size", 22)
-	hud.add_child(money_label)
+	# top bar
+	var top: PanelContainer = _panel(root)
+	top.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	top.offset_left = 10
+	top.offset_right = -10
+	top.offset_top = 10
+	var tb: HBoxContainer = HBoxContainer.new()
+	tb.add_theme_constant_override("separation", 30)
+	top.add_child(tb)
+	money_label = UI.label("", 24, UI.ACCENT)
+	tb.add_child(money_label)
+	sel_label = UI.label("", 18)
+	tb.add_child(sel_label)
+	var sp: Control = Control.new()
+	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tb.add_child(sp)
+	var country_name: String = "Spectator"
+	if my_slot >= 0:
+		country_name = Net.slots[my_slot]["country"]
+	tb.add_child(UI.label(country_name.to_upper(), 20, Data.PLAYER_COLORS[maxi(my_slot, 0)]))
 
-	help_label = Label.new()
-	help_label.position = Vector2(16, 42)
-	help_label.text = "LMB select | RMB move/attack | WASD/edges pan | wheel zoom | Q/E train | Esc menu"
-	hud.add_child(help_label)
+	# players list (top right)
+	var pl: PanelContainer = _panel(root)
+	pl.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	pl.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	pl.offset_top = 78
+	pl.offset_right = -10
+	players_label = RichTextLabel.new()
+	players_label.bbcode_enabled = true
+	players_label.fit_content = true
+	players_label.scroll_active = false
+	players_label.custom_minimum_size = Vector2(290, 0)
+	players_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pl.add_child(players_label)
 
-	players_label = Label.new()
-	hud.add_child(players_label)
-
-	status_label = Label.new()
-	status_label.add_theme_font_size_override("font_size", 48)
-	hud.add_child(status_label)
-
+	# bottom command bar
+	var bottom: PanelContainer = _panel(root)
+	bottom.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
+	bottom.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	bottom.offset_left = 10
+	bottom.offset_bottom = -10
+	var bh: HBoxContainer = HBoxContainer.new()
+	bh.add_theme_constant_override("separation", 14)
+	bottom.add_child(bh)
+	minimap = MiniMap.new()
+	minimap.game = self
+	bh.add_child(minimap)
+	var bv: VBoxContainer = VBoxContainer.new()
+	bv.add_theme_constant_override("separation", 8)
+	bh.add_child(bv)
+	bv.add_child(UI.label("TRAIN", 14, Color("8b98a9")))
 	if my_slot >= 0:
 		var country: String = Net.slots[my_slot]["country"]
 		for idx in 2:
 			var st: Dictionary = Data.unit(country, idx)
 			var b: Button = Button.new()
-			b.text = "[%s] %s  $%d" % [["Q", "E"][idx], st["name"], st["cost"]]
-			b.custom_minimum_size = Vector2(220, 40)
+			b.text = "[%s]  %s   $%d" % [["Q", "E"][idx], st["name"], st["cost"]]
+			b.custom_minimum_size = Vector2(250, 46)
 			b.pressed.connect(_train.bind(idx))
-			hud.add_child(b)
+			bv.add_child(b)
 			train_buttons.append(b)
+	var help: Label = UI.label("LMB select   RMB move / attack\nWASD pan   Wheel zoom   F11 fullscreen\nEsc menu", 13, Color("8b98a9"))
+	bv.add_child(help)
+
+	# centre status (victory / defeat)
+	status_label = UI.label("", 72, UI.ACCENT)
+	status_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	status_label.add_theme_constant_override("outline_size", 12)
+	root.add_child(status_label)
+	status_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	status_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	status_label.grow_vertical = Control.GROW_DIRECTION_BOTH
 
 	drag_rect = ColorRect.new()
-	drag_rect.color = Color(0, 1, 0, 0.15)
+	drag_rect.color = Color(0.2, 1, 0.2, 0.15)
 	drag_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	drag_rect.visible = false
-	hud.add_child(drag_rect)
+	root.add_child(drag_rect)
+
+	_build_pause()
 
 
-func _layout_hud() -> void:
-	var sz: Vector2 = get_viewport().get_visible_rect().size
-	players_label.position = Vector2(sz.x - 300, 10)
-	status_label.position = Vector2(sz.x * 0.5 - 250, sz.y * 0.35)
-	for k in train_buttons.size():
-		train_buttons[k].position = Vector2(16, sz.y - 56 - 48 * k)
+func _build_pause() -> void:
+	pause_layer = CanvasLayer.new()
+	pause_layer.layer = 10
+	add_child(pause_layer)
+	var root: Control = Control.new()
+	root.theme = UI.make_theme()
+	pause_layer.add_child(root)
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var dim: ColorRect = ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.6)
+	root.add_child(dim)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var c: CenterContainer = CenterContainer.new()
+	root.add_child(c)
+	c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var p: PanelContainer = PanelContainer.new()
+	c.add_child(p)
+	var v: VBoxContainer = VBoxContainer.new()
+	v.add_theme_constant_override("separation", 12)
+	p.add_child(v)
+	var t: Label = UI.label("MENU", 36, UI.ACCENT)
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(t)
+	var resume: Button = Button.new()
+	resume.text = "RESUME"
+	resume.custom_minimum_size = Vector2(300, 50)
+	resume.pressed.connect(func(): pause_layer.visible = false)
+	v.add_child(resume)
+	var fs: Button = Button.new()
+	fs.text = "TOGGLE FULLSCREEN (F11)"
+	fs.custom_minimum_size = Vector2(300, 50)
+	fs.pressed.connect(Net.toggle_fullscreen)
+	v.add_child(fs)
+	var leave: Button = Button.new()
+	leave.text = "LEAVE MATCH"
+	leave.custom_minimum_size = Vector2(300, 50)
+	leave.pressed.connect(_leave)
+	v.add_child(leave)
+	pause_layer.visible = false
 
 
 # ------------------------------------------------------------------ per-frame
@@ -177,7 +287,6 @@ func _process(dt: float) -> void:
 			running = true
 
 	_pan_camera(dt)
-	_layout_hud()
 
 	var k: float = minf(1.0, dt * 14.0)
 	for id in views:
@@ -188,16 +297,22 @@ func _process(dt: float) -> void:
 	_draw_shots(dt)
 
 	if my_slot >= 0 and my_slot < money.size():
-		money_label.text = "Credits: %d" % int(money[my_slot])
-	var lines: Array = []
+		money_label.text = "$ %d" % int(money[my_slot])
+	sel_label.text = ("Selected: %d" % selected.size()) if not selected.is_empty() else ""
+	var lines: PackedStringArray = PackedStringArray()
 	for i in Net.slots.size():
-		var s: Dictionary = Net.slots[i]
-		if s["type"] == "human" or s["type"] == "bot":
-			var n: String = str(s["name"]) if str(s["name"]) != "" else "Bot"
+		var sl: Dictionary = Net.slots[i]
+		if sl["type"] == "human" or sl["type"] == "bot":
+			var n: String = str(sl["name"]) if str(sl["name"]) != "" else "Bot"
 			var dead: bool = i < alive_arr.size() and not alive_arr[i]
-			lines.append("%d %s - %s%s" % [i + 1, n, s["country"], "  [OUT]" if dead else ""])
+			var col: String = Data.PLAYER_COLORS[i].to_html(false)
+			var line: String = "[color=#%s]■[/color] %s  [color=#8b98a9]%s[/color]" % [col, n, sl["country"]]
+			if dead:
+				line = "[s][color=#6b7280]%s  %s[/color][/s]  [color=#ff7b72]OUT[/color]" % [n, sl["country"]]
+			lines.append(line)
 	players_label.text = "\n".join(lines)
 	status_label.text = status_text
+	minimap.queue_redraw()
 
 	if dragging:
 		var m: Vector2 = get_viewport().get_mouse_position()
@@ -399,7 +514,7 @@ func _unhandled_input(ev: InputEvent) -> void:
 		elif ev.keycode == KEY_E:
 			_train(1)
 		elif ev.keycode == KEY_ESCAPE:
-			_leave()
+			pause_layer.visible = not pause_layer.visible
 
 
 func _ground_point(sp: Vector2) -> Variant:
