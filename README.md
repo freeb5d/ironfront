@@ -1,19 +1,23 @@
 # IronFront
 
-A small Command & Conquer: Generals-style RTS in Unreal Engine 5.4 (C++). All content is created in code (primitive meshes, runtime lighting), so the project needs no editor work.
+A Generals-style RTS in Godot 4.3 (GDScript, lightweight GL Compatibility renderer).
+Up to **8 players** on one map (humans and bots), **5 countries** (USA, China, Russia, Israel, Iran), LAN / direct-IP multiplayer.
 
 ## Play
-- **LMB** click / drag: select units
-- **RMB**: move, or attack an enemy unit/building
-- **Q**: train a soldier (100 credits; you earn 10/s)
-- **WASD / screen edges**: pan, **mouse wheel**: zoom
-- Destroy the red HQ before yours falls. Enemy waves grow every 25 s.
+1. Download the Windows or Linux build from the latest run in the **Actions** tab (Artifacts).
+2. **Offline**: "Play offline vs 7 bots".
+3. **Multiplayer**: one player clicks *Host*, opens UDP port 24680 if playing over the internet (LAN needs nothing), and shares their IP. Others enter it and click *Join*. The host sets each slot to Open / Bot / Closed, everyone picks their country, and the host presses START.
 
-## Building in the cloud (GitHub Actions)
-1. Link your GitHub account to Epic Games: https://www.unrealengine.com/en-US/ue-on-github
-2. Create a GitHub personal access token with `read:packages`, then add repo secrets `GHCR_USER` (your username) and `GHCR_TOKEN`.
-3. Push to `main` (or run the workflow from the Actions tab). The Linux build is uploaded as an artifact.
-4. A Windows build needs a self-hosted runner with UE 5.4 installed (`UE_ROOT` env var); trigger it manually.
+Controls: LMB select / drag-box, RMB move or attack, WASD or screen edges pan, wheel zoom, Q / E train the light / heavy unit, Esc leaves.
 
-## Ideas for next steps
-Navmesh pathfinding, more unit types, resource buildings, fog of war, real art, a proper map.
+Rules: destroy every other HQ. A player whose HQ falls is eliminated (their units vanish). Last one standing wins. 6 credits/s income, 40 unit cap.
+
+## Layout
+- `scripts/data.gd` countries and stats (add a country = add a dictionary entry)
+- `scripts/sim.gd` server-side simulation and bot AI (headless testable)
+- `scripts/net.gd` lobby and connection (host is authoritative)
+- `scripts/game.gd` rendering, camera, input, snapshot sync (10 Hz)
+- `tests/smoke.gd` headless 8-bot match, run by CI
+
+## Next
+Base building, resource nodes, pathfinding, teams, per-country special powers, fog of war, real art and sound, Steam / EOS matchmaking.

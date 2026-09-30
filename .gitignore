@@ -1,11 +1,4 @@
-Binaries/
-Build/
-DerivedDataCache/
-Intermediate/
-Saved/
-.vs/
-*.sln
-*.suo
-*.VC.db
-*.opensdf
-*.sdf
+.godot/
+build/
+*.translation
+export_credentials.cfg
