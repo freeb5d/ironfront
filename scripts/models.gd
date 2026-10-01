@@ -64,5 +64,35 @@ static func place(parent: Node, path: String, pos: Vector3, size: float, by_h: b
 	var inst: Node3D = res.instantiate()
 	holder.add_child(inst)
 	fit(inst, size, by_h)
+	realify(inst, path)
 	play_idle(inst)
 	return holder
+
+
+## Makes the stylised prop models look natural: green foliage instead of teal, real rock texture on boulders.
+static func realify(inst: Node, path: String) -> void:
+	var is_tree: bool = path.contains("/tree")
+	var is_rock: bool = path.contains("rocks") or path.contains("stones")
+	if not is_tree and not is_rock:
+		return
+	var rock_mat: StandardMaterial3D = null
+	if is_rock:
+		rock_mat = StandardMaterial3D.new()
+		rock_mat.albedo_texture = load("res://assets/terrain/rock.jpg")
+		rock_mat.albedo_color = Color(0.85, 0.82, 0.78)
+		rock_mat.uv1_triplanar = true
+		rock_mat.uv1_scale = Vector3(0.18, 0.18, 0.18)
+		rock_mat.roughness = 1.0
+	for n in inst.find_children("*", "MeshInstance3D", true, false):
+		var mi: MeshInstance3D = n
+		if mi.mesh == null:
+			continue
+		for s in mi.mesh.get_surface_count():
+			if is_rock:
+				mi.set_surface_override_material(s, rock_mat)
+			else:
+				var src: Material = mi.mesh.surface_get_material(s)
+				if src is BaseMaterial3D:
+					var mat: BaseMaterial3D = src.duplicate()
+					mat.albedo_color = Color(0.78, 0.95, 0.34) * mat.albedo_color
+					mi.set_surface_override_material(s, mat)

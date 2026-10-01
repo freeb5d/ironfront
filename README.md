@@ -174,7 +174,8 @@ All art is CC0 (public domain); thanks to the creators:
 
 - Soldiers, tanks and trucks: [Quaternius](https://quaternius.com) via [Poly Pizza](https://poly.pizza)
 - HQ buildings, containers, tanks and water towers: [Kenney](https://kenney.nl) *City Kit (Industrial)*
-- Terrain textures (sand, grass): [Poly Haven](https://polyhaven.com) *aerial_sand* and *leafy_grass*, CC0
+- Terrain textures (sand, grass, rock): [Poly Haven](https://polyhaven.com) *aerial_sand*, *leafy_grass* and *rocky_terrain_02*, CC0
+- Iranian missile truck base: truck-flat from the [Kenney Car Kit](https://kenney.nl/assets/car-kit), CC0
 - Rank insignia: *rank-1/2/3* by Skoll from [game-icons.net](https://game-icons.net), [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/) (background removed)
 - Font: [Rajdhani](https://fonts.google.com/specimen/Rajdhani) (SIL Open Font License)
 - Trees, rocks, tents and flags: [Kenney](https://kenney.nl) *Mini Forest*

@@ -101,7 +101,7 @@ const VISUALS := {
 	"China": {"hq": _B + "building-c.glb", "units": [[_U + "soldier_a.glb", true, 3.6], [_U + "tank_b.glb", false, 7.0]]},
 	"Russia": {"hq": _B + "building-e.glb", "units": [[_U + "soldier_a.glb", true, 3.6], [_U + "tank_c.glb", false, 7.6]]},
 	"Israel": {"hq": _B + "building-g.glb", "units": [[_U + "soldier_b.glb", true, 3.6], [_U + "tank_d.glb", false, 7.0]]},
-	"Iran": {"hq": _B + "building-i.glb", "units": [[_U + "soldier_a.glb", true, 3.6], [_U + "vehicle_x.glb", false, 7.4]]},
+	"Iran": {"hq": _B + "building-i.glb", "units": [[_U + "soldier_a.glb", true, 3.6], ["res://assets/units/missile_truck.tscn", false, 7.6]]},
 }
 
 

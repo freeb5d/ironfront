@@ -1533,6 +1533,7 @@ func _place_model(path: String, pos: Vector3, size: float, by_h: bool, yaw: floa
 	var inst: Node3D = res.instantiate()
 	holder.add_child(inst)
 	_fit(inst, size, by_h)
+	Models.realify(inst, path)
 
 
 func _scatter_props() -> void:
@@ -2030,9 +2031,27 @@ func _update_rank(id: int, rank: int) -> void:
 	if rank == 9: # still under construction: the building rises with its progress
 		var prog: float = float(info[id][2]) if info.has(id) else 0.5
 		v.get_node("pivot").scale = Vector3(1.0, clampf(0.2 + 0.8 * prog, 0.2, 1.0), 1.0)
+		var pct: Label3D = v.get_node_or_null("pct")
+		if pct == null:
+			pct = Label3D.new()
+			pct.name = "pct"
+			pct.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+			pct.no_depth_test = true
+			pct.fixed_size = false
+			pct.pixel_size = 0.045
+			pct.font_size = 64
+			pct.outline_size = 14
+			pct.modulate = Color(1.0, 0.9, 0.35)
+			pct.outline_modulate = Color(0, 0, 0, 1)
+			pct.position.y = float(v.get_node("hp").position.y) + 3.0
+			v.add_child(pct)
+		pct.text = "%d%%" % int(clampf(prog, 0.0, 1.0) * 100.0)
 		v.set_meta("rank", 9)
 		return
 	if prev == 9:
+		var pct_old: Node = v.get_node_or_null("pct")
+		if pct_old != null:
+			pct_old.queue_free()
 		v.get_node("pivot").scale = Vector3.ONE
 		v.set_meta("rank", 0)
 		prev = 0

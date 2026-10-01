@@ -145,7 +145,9 @@ func _build_diorama() -> void:
 	pm.size = Vector2(400, 400)
 	ground.mesh = pm
 	var gm: StandardMaterial3D = StandardMaterial3D.new()
-	gm.albedo_color = Color(0.78, 0.66, 0.46)
+	gm.albedo_texture = load("res://assets/terrain/sand.jpg")
+	gm.albedo_color = Color(0.95, 0.85, 0.7)
+	gm.uv1_scale = Vector3(40, 40, 1)
 	gm.roughness = 1.0
 	ground.material_override = gm
 	add_child(ground)
@@ -160,7 +162,7 @@ func _build_diorama() -> void:
 	Models.place(self, units + "tank_b.glb", Vector3(10, 0, 15), 10.0, false, -0.3)
 	Models.place(self, units + "tank_c.glb", Vector3(22, 0, 8), 10.5, false, 0.2)
 	Models.place(self, units + "tank_d.glb", Vector3(-14, 0, 18), 10.0, false, 0.9)
-	Models.place(self, units + "vehicle_x.glb", Vector3(34, 0, 14), 10.0, false, -0.8)
+	Models.place(self, "res://assets/units/missile_truck.tscn", Vector3(34, 0, 14), 10.0, false, -0.8)
 	for i in 9:
 		var model: String = units + ("soldier_a.glb" if i % 2 == 0 else "soldier_b.glb")
 		Models.place(self, model, Vector3(-8 + i * 2.6, 0, 24 + (i % 3) * 2.2), 5.2, true, 0.3 + i * 0.5)
