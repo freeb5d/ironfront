@@ -111,8 +111,9 @@ const OPTION_DEFS := {
 	"start_units": {"label": "Starting army", "values": [2, 4, 8], "names": ["Small", "Normal", "Large"]},
 	"teams": {"label": "Teams", "values": ["ffa", "2t", "4t"], "names": ["Free for all", "2 teams of 4", "4 teams of 2"]},
 	"powers": {"label": "Commander powers", "values": [true, false], "names": ["On", "Off"]},
+	"fog": {"label": "Fog of war", "values": [false, true], "names": ["Off", "On"]},
 }
-const DEFAULT_OPTIONS := {"money": 500, "speed": 1.0, "unit_cap": 40, "start_units": 4, "teams": "ffa", "powers": true}
+const DEFAULT_OPTIONS := {"money": 500, "speed": 1.0, "unit_cap": 40, "start_units": 4, "teams": "ffa", "powers": true, "fog": false}
 
 
 # Single-player "Challenge" ladder. Player is always slot 0 (team 0); bots come from `bots`.

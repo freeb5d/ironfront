@@ -58,6 +58,11 @@ var super_tile: Button
 var upg_tiles: Array = []
 var shake: float = 0.0
 var tips_shown: Dictionary = {}
+var fog_on: bool = false
+var hidden: Dictionary = {}     # enemy entities currently hidden by the fog
+var seen_buildings: Dictionary = {}
+var fog_timer: float = 0.0
+var shadow_tex: GradientTexture2D = null
 
 var cam_pivot: Node3D
 var cam: Camera3D
@@ -76,6 +81,7 @@ var drag_start: Vector2 = Vector2.ZERO
 
 
 func _ready() -> void:
+	fog_on = bool(Net.options.get("fog", false))
 	var me: int = multiplayer.get_unique_id()
 	for i in Net.slots.size():
 		if Net.slots[i]["type"] == "human" and Net.slots[i]["peer"] == me:
@@ -207,11 +213,21 @@ func _slot_of(peer: int) -> int:
 
 func _build_world() -> void:
 	var env: Environment = Environment.new()
-	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color(0.45, 0.6, 0.8)
-	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color(1, 1, 1)
-	env.ambient_light_energy = 0.5
+	var sky_mat: ProceduralSkyMaterial = ProceduralSkyMaterial.new()
+	sky_mat.sky_top_color = Color(0.22, 0.42, 0.78)
+	sky_mat.sky_horizon_color = Color(0.84, 0.76, 0.64)
+	sky_mat.ground_horizon_color = Color(0.84, 0.76, 0.64)
+	sky_mat.ground_bottom_color = Color(0.5, 0.42, 0.32)
+	var sky: Sky = Sky.new()
+	sky.sky_material = sky_mat
+	env.background_mode = Environment.BG_SKY
+	env.sky = sky
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+	env.ambient_light_energy = 0.85
+	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	env.fog_enabled = true
+	env.fog_light_color = Color(0.82, 0.74, 0.62)
+	env.fog_density = 0.0011
 	var we: WorldEnvironment = WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
@@ -231,6 +247,31 @@ func _build_world() -> void:
 	gm.roughness = 1.0
 	ground.material_override = gm
 	add_child(ground)
+
+	# a dark outer plain so the map edge never shows the sky, and a low rock rim around the playable area
+	var outer: MeshInstance3D = MeshInstance3D.new()
+	var opm: PlaneMesh = PlaneMesh.new()
+	opm.size = Vector2(1800, 1800)
+	outer.mesh = opm
+	var omat: StandardMaterial3D = StandardMaterial3D.new()
+	omat.albedo_color = Color(0.5, 0.42, 0.31)
+	omat.roughness = 1.0
+	outer.material_override = omat
+	outer.position.y = -0.15
+	add_child(outer)
+	var rock: StandardMaterial3D = StandardMaterial3D.new()
+	rock.albedo_color = Color(0.36, 0.3, 0.24)
+	rock.roughness = 1.0
+	for side in 4:
+		var wall: MeshInstance3D = MeshInstance3D.new()
+		var wm: BoxMesh = BoxMesh.new()
+		var along_x: bool = side < 2
+		wm.size = Vector3(330.0, 5.0, 8.0) if along_x else Vector3(8.0, 5.0, 330.0)
+		wall.mesh = wm
+		wall.material_override = rock
+		var off: float = 156.0 * (1.0 if side % 2 == 0 else -1.0)
+		wall.position = Vector3(0.0, 2.0, off) if along_x else Vector3(off, 2.0, 0.0)
+		add_child(wall)
 
 	_scatter_props()
 	_decorate_bases()
@@ -272,6 +313,18 @@ func _make_ground_texture() -> ImageTexture:
 			if absf(x) > 152.0 or absf(z) > 152.0:
 				c = c.darkened(0.35)
 			img.set_pixel(px, py, c)
+	for si in Data.MAX_SLOTS:
+		var base: Vector3 = Data.slot_pos(si)
+		for stp in 70: # dirt road from the base towards the middle
+			var tp: Vector3 = base.lerp(Vector3.ZERO, float(stp) / 70.0 * 0.78)
+			var cxp: int = int((tp.x / 320.0 + 0.5) * n)
+			var czp: int = int((tp.z / 320.0 + 0.5) * n)
+			img.fill_rect(Rect2i(cxp - 3, czp - 3, 7, 7), Color(0.62, 0.52, 0.37))
+			img.fill_rect(Rect2i(cxp - 1, czp - 1, 3, 3), Color(0.57, 0.47, 0.33))
+		var bpx: int = int((base.x / 320.0 + 0.5) * n)
+		var bpz: int = int((base.z / 320.0 + 0.5) * n)
+		img.fill_rect(Rect2i(bpx - 17, bpz - 17, 34, 34), Color(0.47, 0.46, 0.44)) # concrete pad
+		img.fill_rect(Rect2i(bpx - 15, bpz - 15, 30, 30), Color(0.58, 0.57, 0.54))
 	return ImageTexture.create_from_image(img)
 
 
@@ -279,98 +332,6 @@ func _panel(root: Control) -> PanelContainer:
 	var p: PanelContainer = PanelContainer.new()
 	root.add_child(p)
 	return p
-
-
-func _build_hud() -> void:
-	var layer: CanvasLayer = CanvasLayer.new()
-	add_child(layer)
-	var root: Control = Control.new()
-	root.theme = UI.make_theme()
-	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	layer.add_child(root)
-	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-
-	# top bar
-	var top: PanelContainer = _panel(root)
-	top.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
-	top.offset_left = 10
-	top.offset_right = -10
-	top.offset_top = 10
-	var tb: HBoxContainer = HBoxContainer.new()
-	tb.add_theme_constant_override("separation", 30)
-	top.add_child(tb)
-	money_label = UI.label("", 24, UI.ACCENT)
-	tb.add_child(money_label)
-	sel_label = UI.label("", 18)
-	tb.add_child(sel_label)
-	var sp: Control = Control.new()
-	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	tb.add_child(sp)
-	var country_name: String = "Spectator"
-	if my_slot >= 0:
-		country_name = Net.slots[my_slot]["country"]
-	tb.add_child(UI.label(country_name.to_upper(), 20, Data.PLAYER_COLORS[maxi(my_slot, 0)]))
-
-	# players list (top right)
-	var pl: PanelContainer = _panel(root)
-	pl.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
-	pl.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	pl.offset_top = 78
-	pl.offset_right = -10
-	players_label = RichTextLabel.new()
-	players_label.bbcode_enabled = true
-	players_label.fit_content = true
-	players_label.scroll_active = false
-	players_label.custom_minimum_size = Vector2(290, 0)
-	players_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	pl.add_child(players_label)
-
-	# bottom command bar
-	var bottom: PanelContainer = _panel(root)
-	bottom.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
-	bottom.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	bottom.offset_left = 10
-	bottom.offset_bottom = -10
-	var bh: HBoxContainer = HBoxContainer.new()
-	bh.add_theme_constant_override("separation", 14)
-	bottom.add_child(bh)
-	minimap = MiniMap.new()
-	minimap.game = self
-	minimap.bg = ground_tex
-	bh.add_child(minimap)
-	var bv: VBoxContainer = VBoxContainer.new()
-	bv.add_theme_constant_override("separation", 8)
-	bh.add_child(bv)
-	bv.add_child(UI.label("TRAIN", 14, Color("8b98a9")))
-	if my_slot >= 0:
-		var country: String = Net.slots[my_slot]["country"]
-		for idx in 3:
-			var st: Dictionary = Data.unit(country, idx)
-			var b: Button = Button.new()
-			b.text = "[%s]  %s   $%d" % [["Q", "E", "R"][idx], st["name"], st["cost"]]
-			b.custom_minimum_size = Vector2(250, 46)
-			b.pressed.connect(_train.bind(idx))
-			bv.add_child(b)
-			train_buttons.append(b)
-	var help: Label = UI.label("Click select   Right-drag = box select   Right-click = move / attack / harvest\nLeft-drag = move map   WASD pan   Wheel zoom   F army   F11 fullscreen   Esc menu", 13, Color("8b98a9"))
-	bv.add_child(help)
-
-	# centre status (victory / defeat)
-	status_label = UI.label("", 72, UI.ACCENT)
-	status_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	status_label.add_theme_constant_override("outline_size", 12)
-	root.add_child(status_label)
-	status_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	status_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	status_label.grow_vertical = Control.GROW_DIRECTION_BOTH
-
-	drag_rect = ColorRect.new()
-	drag_rect.color = Color(0.2, 1, 0.2, 0.15)
-	drag_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	drag_rect.visible = false
-	root.add_child(drag_rect)
-
-	_build_pause()
 
 
 func _sb(fill: Color, border: Color, bw: int, radius: int, margin: int) -> StyleBoxFlat:
@@ -422,6 +383,52 @@ func _msg(text: String, col: Color = Color(1, 1, 1), ttl: float = 6.0) -> void:
 	msgs.append([text, ttl, col])
 	if msgs.size() > 5:
 		msgs.pop_front()
+
+
+func _update_fog(dt: float) -> void:
+	if not fog_on or my_slot < 0:
+		return
+	fog_timer -= dt
+	if fog_timer > 0.0:
+		return
+	fog_timer = 0.25
+	var grid: Dictionary = {}
+	for id in info:
+		var ow: int = info[id][1]
+		if ow < 0 or _is_enemy(ow):
+			continue
+		var cell: Vector2i = Vector2i(floori(targets[id].x / 50.0), floori(targets[id].z / 50.0))
+		if not grid.has(cell):
+			grid[cell] = []
+		grid[cell].append([targets[id], 62.0 if info[id][0] == 0 or info[id][0] >= 7 else 46.0])
+	for id in info:
+		var ow2: int = info[id][1]
+		if not views.has(id):
+			continue
+		if ow2 < 0 or not _is_enemy(ow2):
+			views[id].visible = true
+			hidden.erase(id)
+			continue
+		var cx: int = floori(targets[id].x / 50.0)
+		var cz: int = floori(targets[id].z / 50.0)
+		var seen_now: bool = false
+		for dx in range(-1, 2):
+			for dz in range(-1, 2):
+				var cl = grid.get(Vector2i(cx + dx, cz + dz))
+				if cl == null:
+					continue
+				for src in cl:
+					if Vector2(src[0].x - targets[id].x, src[0].z - targets[id].z).length() < float(src[1]):
+						seen_now = true
+		var is_b: bool = info[id][0] == 0 or info[id][0] >= 7
+		if is_b and seen_now:
+			seen_buildings[id] = true
+		var show: bool = seen_now or (is_b and seen_buildings.has(id))
+		views[id].visible = show
+		if show:
+			hidden.erase(id)
+		else:
+			hidden[id] = true
 
 
 func _tip(id: String, text: String) -> void:
@@ -552,7 +559,8 @@ func _build_hud_v2() -> void:
 			grid.add_child(b)
 			_tile_ready(b)
 			train_buttons.append(b)
-			b.tooltip_text = "%s\nHP %d   Damage %d   Range %d" % [Data.TRAIN_TIPS[idx], st["hp"], st["dmg"], st["rng"]] if idx < 2 else str(Data.TRAIN_TIPS[idx])
+			b.tooltip_text = ("%s\nHP %d   Damage %d   Range %d" % [Data.TRAIN_TIPS[idx], st["hp"], st["dmg"], st["rng"]] if idx < 2 else str(Data.TRAIN_TIPS[idx])) + "\nRight-click: cancel one queued"
+			b.gui_input.connect(_on_tile_input.bind(idx))
 		var army_vis: Array = Data.VISUALS[country]["units"][0]
 		var t_army: Button = _tile("Select army\n[F]", _select_kinds.bind([1, 2]), [[army_vis[0], true, 3.2]])
 		grid.add_child(t_army)
@@ -839,6 +847,7 @@ func _process(dt: float) -> void:
 			running = true
 
 	_pan_camera(dt)
+	_update_fog(dt)
 	if shake > 0.0:
 		cam.h_offset = randf_range(-1.0, 1.0) * shake * 1.5
 		cam.v_offset = randf_range(-1.0, 1.0) * shake * 1.5
@@ -1011,6 +1020,7 @@ func on_snapshot(snap: PackedFloat32Array, shots: PackedFloat32Array, money_p: P
 				_msg("A money field has run dry", Color(0.8, 0.8, 0.8))
 				_burst(bpos, 12, 0.6, 0.2, Color(1.0, 0.85, 0.2), 5.0, Vector3(0, -9, 0))
 			elif kd == 0:
+				_flash_light(bpos, 6.0, 40.0, 0.5)
 				_play3d("boom", bpos, 4.0)
 				_burst(bpos, 60, 1.0, 0.6, Color(1.0, 0.45, 0.1), 14.0, Vector3(0, -8, 0))
 			elif kd == 2 or kd >= 7:
@@ -1101,12 +1111,44 @@ func _make_view(id: int, kind: int, owner: int) -> void:
 	disc.mesh = dm
 	var dmat: StandardMaterial3D = StandardMaterial3D.new()
 	dmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	dmat.albedo_color = col
+	dmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	dmat.albedo_color = Color(col.r, col.g, col.b, 0.34)
 	disc.material_override = dmat
 	disc.position.y = 0.07
 	disc.visible = kind != 5
 	pivot.add_child(disc)
 	root.set_meta("disc", dmat)
+	var rmat2: StandardMaterial3D = StandardMaterial3D.new()
+	rmat2.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	rmat2.albedo_color = col
+	if kind != 5:
+		var team_ring: MeshInstance3D = MeshInstance3D.new()
+		var tm: TorusMesh = TorusMesh.new()
+		tm.inner_radius = maxf(disc_r - 0.35, 0.1)
+		tm.outer_radius = disc_r
+		tm.rings = 28
+		tm.ring_segments = 6
+		team_ring.mesh = tm
+		team_ring.scale = Vector3(1.0, 0.12, 1.0)
+		team_ring.position.y = 0.1
+		team_ring.material_override = rmat2
+		pivot.add_child(team_ring)
+	root.set_meta("ring_mat", rmat2)
+	# soft fake shadow, so units sit on the ground even with real shadows switched off
+	var blob: MeshInstance3D = MeshInstance3D.new()
+	var bq: QuadMesh = QuadMesh.new()
+	bq.size = Vector2.ONE * (disc_r * 2.7 + 1.0)
+	blob.mesh = bq
+	blob.rotation_degrees.x = -90.0
+	blob.position = Vector3(disc_r * 0.18, 0.03, disc_r * 0.18)
+	var blob_mat: StandardMaterial3D = StandardMaterial3D.new()
+	blob_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	blob_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	blob_mat.albedo_texture = _shadow_texture()
+	blob_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	blob.material_override = blob_mat
+	if kind != 5:
+		pivot.add_child(blob)
 	root.set_meta("owner", owner)
 
 	if kind == 4 or kind == 5:
@@ -1128,6 +1170,9 @@ func _make_view(id: int, kind: int, owner: int) -> void:
 			fb.mesh = cm
 			fb.position.y = 1.0
 			pivot.add_child(fb)
+
+	if kind == 0 or (kind >= 7 and kind != 11):
+		_add_flags(pivot, kind, col, disc_r * 0.8)
 
 	var bar: MeshInstance3D = MeshInstance3D.new()
 	var barm: BoxMesh = BoxMesh.new()
@@ -1158,10 +1203,58 @@ func _make_view(id: int, kind: int, owner: int) -> void:
 	ring.name = "sel"
 	root.add_child(ring)
 
+	if fog_on and _is_enemy(owner):
+		root.visible = false
+		hidden[id] = true
 	views[id] = root
 
 
 # ---- model helpers ----
+
+func _shadow_texture() -> GradientTexture2D:
+	if shadow_tex == null:
+		var gr: Gradient = Gradient.new()
+		gr.offsets = PackedFloat32Array([0.0, 0.55, 1.0])
+		gr.colors = PackedColorArray([Color(0, 0, 0, 0.5), Color(0, 0, 0, 0.22), Color(0, 0, 0, 0.0)])
+		shadow_tex = GradientTexture2D.new()
+		shadow_tex.gradient = gr
+		shadow_tex.fill = GradientTexture2D.FILL_RADIAL
+		shadow_tex.fill_from = Vector2(0.5, 0.5)
+		shadow_tex.fill_to = Vector2(1.0, 0.5)
+		shadow_tex.width = 128
+		shadow_tex.height = 128
+	return shadow_tex
+
+
+func _tint(n: Node, col: Color) -> void:
+	for mi in n.find_children("*", "MeshInstance3D", true, false):
+		var m: StandardMaterial3D = StandardMaterial3D.new()
+		m.albedo_color = col
+		m.roughness = 0.7
+		mi.material_override = m
+
+
+func _add_flags(pivot: Node3D, kind: int, col: Color, radius: float) -> void:
+	var spots: Array = [Vector3(radius * 0.85, 0.0, radius * 0.5)]
+	if kind == 0:
+		spots.append(Vector3(-radius * 0.85, 0.0, radius * 0.5))
+	for sp in spots:
+		var holder: Node3D = Models.place(pivot, "res://assets/props/flag.glb", sp, 6.5, true, 0.0)
+		if holder != null:
+			_tint(holder, col)
+
+
+func _flash_light(pos: Vector3, energy: float, reach: float, dur: float) -> void:
+	var l: OmniLight3D = OmniLight3D.new()
+	l.light_color = Color(1.0, 0.7, 0.4)
+	l.light_energy = energy
+	l.omni_range = reach
+	l.position = pos + Vector3(0, 4, 0)
+	add_child(l)
+	var tw: Tween = create_tween()
+	tw.tween_property(l, "light_energy", 0.0, dur)
+	tw.tween_callback(l.queue_free)
+
 
 func _set_owner(id: int, owner: int) -> void:
 	var v: Node3D = views[id]
@@ -1177,7 +1270,11 @@ func _set_owner(id: int, owner: int) -> void:
 			_msg("%s captured an oil derrick" % str(Net.slots[owner]["country"]), Color(1.0, 0.85, 0.3))
 	v.set_meta("owner", owner)
 	var mat: StandardMaterial3D = v.get_meta("disc")
-	mat.albedo_color = Data.PLAYER_COLORS[owner] if owner >= 0 else Color(0.6, 0.6, 0.6)
+	var cc: Color = Data.PLAYER_COLORS[owner] if owner >= 0 else Color(0.6, 0.6, 0.6)
+	mat.albedo_color = Color(cc.r, cc.g, cc.b, mat.albedo_color.a)
+	if v.has_meta("ring_mat"):
+		var rm: StandardMaterial3D = v.get_meta("ring_mat")
+		rm.albedo_color = cc
 
 
 func _label3d(text: String, col: Color, y: float, px: float) -> Label3D:
@@ -1764,6 +1861,24 @@ func minimap_order(pos: Vector3) -> void:
 		srv_move.rpc_id(1, ids, pos, amove)
 
 
+func _on_tile_input(ev: InputEvent, idx: int) -> void:
+	if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_RIGHT:
+		if multiplayer.is_server():
+			if sim != null:
+				sim.cmd_untrain(my_slot, idx)
+		else:
+			srv_untrain.rpc_id(1, idx)
+
+
+@rpc("any_peer", "reliable")
+func srv_untrain(idx: int) -> void:
+	if not multiplayer.is_server() or sim == null:
+		return
+	var slot: int = _slot_of(multiplayer.get_remote_sender_id())
+	if slot >= 0:
+		sim.cmd_untrain(slot, idx)
+
+
 func _cast_assist(bid: int) -> void:
 	var ids: Array = _selected_builders()
 	if multiplayer.is_server():
@@ -1878,6 +1993,7 @@ func _handle_fx(fx_p: PackedFloat32Array) -> void:
 			_play3d("alarm", pos, -8.0)
 		elif t == 2: # strike lands
 			_play3d("boom", pos, 4.0)
+			_flash_light(pos, 5.0, 30.0, 0.35)
 			_burst(pos + Vector3(0, 1, 0), 80, 1.1, 0.8, Color(1.0, 0.5, 0.12), 20.0, Vector3(0, -9, 0))
 			_burst(pos + Vector3(0, 2, 0), 40, 1.4, 1.2, Color(0.25, 0.22, 0.2), 9.0, Vector3(0, 1, 0))
 		elif t == 3: # promotion sparkle
@@ -1899,6 +2015,7 @@ func _handle_fx(fx_p: PackedFloat32Array) -> void:
 			_play_ui("alarm", -2.0)
 		elif t == 6: # superweapon impact
 			_play3d("boom", pos, 10.0)
+			_flash_light(pos, 12.0, 90.0, 0.9)
 			_burst(pos + Vector3(0, 1, 0), 160, 1.6, 1.2, Color(1.0, 0.55, 0.15), 30.0, Vector3(0, -8, 0))
 			_burst(pos + Vector3(0, 3, 0), 80, 2.2, 2.0, Color(0.3, 0.27, 0.25), 14.0, Vector3(0, 2, 0))
 			shake = 0.9
@@ -1924,6 +2041,8 @@ func _fx_material(col: Color) -> StandardMaterial3D:
 
 
 func _spawn_shot(shooter: int, from: Vector3, to: Vector3, kind: int) -> void:
+	if fog_on and hidden.has(shooter):
+		return
 	var dv: Vector3 = to - from
 	dv.y = 0.0
 	if views.has(shooter):
@@ -2225,7 +2344,7 @@ func _right_click(sp: Vector2) -> void:
 		elif k >= 7 and info[id][1] == my_slot and int(info[id][3]) == 9:
 			if d < float(Data.BUILD[k]["radius"]) + 2.0:
 				assist = id
-		elif _is_enemy(info[id][1]):
+		elif _is_enemy(info[id][1]) and not hidden.has(id):
 			var reach: float = 2.5
 			if k == 0:
 				reach = 8.0

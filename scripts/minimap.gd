@@ -27,6 +27,8 @@ func _draw() -> void:
 		draw_rect(Rect2(Vector2.ZERO, size), Color(0.09, 0.15, 0.1))
 	if game != null:
 		for id in game.info:
+			if game.hidden.has(id):
+				continue
 			var p: Vector2 = _to_map(game.targets[id])
 			var kind: int = game.info[id][0]
 			var owner: int = game.info[id][1]

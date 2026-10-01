@@ -532,25 +532,36 @@ func _build_lobby() -> void:
 	opt_panel.add_child(ov)
 	hb.add_child(opt_panel)
 	ov.add_child(UI.label("MATCH OPTIONS", 16, UI.ACCENT))
+	var og: GridContainer = GridContainer.new()
+	og.columns = 2
+	og.add_theme_constant_override("h_separation", 12)
+	og.add_theme_constant_override("v_separation", 4)
+	ov.add_child(og)
 	for key in Data.OPTION_DEFS.keys():
 		var def: Dictionary = Data.OPTION_DEFS[key]
-		ov.add_child(UI.label(str(def["label"]), 15, Color("8b98a9")))
+		var cell: VBoxContainer = VBoxContainer.new()
+		cell.add_theme_constant_override("separation", 0)
+		cell.add_child(UI.label(str(def["label"]), 15, Color("8b98a9")))
 		var ob: OptionButton = OptionButton.new()
-		ob.custom_minimum_size = Vector2(230, 0)
+		ob.custom_minimum_size = Vector2(212, 0)
 		for nm in def["names"]:
 			ob.add_item(str(nm))
 		ob.item_selected.connect(_on_option.bind(key))
-		ov.add_child(ob)
+		cell.add_child(ob)
+		og.add_child(cell)
 		opt_controls[key] = ob
-	ov.add_child(UI.label("Bot difficulty", 15, Color("8b98a9")))
+	var dcell: VBoxContainer = VBoxContainer.new()
+	dcell.add_theme_constant_override("separation", 0)
+	dcell.add_child(UI.label("Bot difficulty", 15, Color("8b98a9")))
 	var dob: OptionButton = OptionButton.new()
-	dob.custom_minimum_size = Vector2(230, 0)
+	dob.custom_minimum_size = Vector2(212, 0)
 	for nm in ["Easy", "Normal", "Hard"]:
 		dob.add_item(nm)
 	dob.item_selected.connect(func(idx: int):
 		Net.difficulty = idx
 		Net.save_settings())
-	ov.add_child(dob)
+	dcell.add_child(dob)
+	og.add_child(dcell)
 	opt_controls["difficulty"] = dob
 	wait_label = _center(UI.label("Waiting for the host to start the game...", 18, UI.ACCENT))
 	v.add_child(wait_label)

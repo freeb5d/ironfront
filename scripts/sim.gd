@@ -108,6 +108,7 @@ var super_cd: Array = []  # superweapon cooldown per slot
 var upg: Array = []       # researched upgrades per slot: [armor, weapons, logistics]
 var upg_prog: Array = []  # seconds spent on each running research, -1 when idle
 var fx: PackedFloat32Array = PackedFloat32Array() # visual events for clients: type, x, z
+var _obstacles: Array = [] # buildings, rebuilt every step, used for steering
 var rand: RandomNumberGenerator = RandomNumberGenerator.new()
 var _next_id: int = 1
 
@@ -511,6 +512,19 @@ func cmd_train(slot: int, idx: int) -> bool:
 	return true
 
 
+## Cancel one queued unit and get the money back.
+func cmd_untrain(slot: int, idx: int) -> bool:
+	if slot < 0 or slot >= alive.size() or not alive[slot] or idx < 0 or idx > 3:
+		return false
+	if qn[slot][idx] <= 0:
+		return false
+	qn[slot][idx] -= 1
+	money[slot] += float(Data.unit(slots[slot]["country"], idx)["cost"])
+	if qn[slot][idx] == 0:
+		qp[slot][idx] = 0.0
+	return true
+
+
 # ---- simulation ----
 
 func step(dt: float) -> void:
@@ -523,6 +537,10 @@ func step(dt: float) -> void:
 					money[i] += Data.INCOME * dt # hard bots get double passive income
 				_bot(i, dt)
 	_recount()
+	_obstacles.clear()
+	for ob in ents.values():
+		if is_building_kind(ob.kind):
+			_obstacles.append(ob)
 	_update_production(dt)
 	_update_upgrades(dt)
 	for e in ents.values():
@@ -551,7 +569,36 @@ func _move(e: Ent, p: Vector3, dt: float) -> void:
 	var l: float = d.length()
 	if l < 0.01:
 		return
-	e.pos += d / l * minf(e.spd * dt, l)
+	var dir: Vector3 = d / l
+	if l > 3.0:
+		dir = _steer(e, dir, l, p)
+	e.pos += dir * minf(e.spd * dt, l)
+
+
+## Bend the walking direction around buildings in the way (instead of grinding along their walls).
+func _steer(e: Ent, dir: Vector3, dist: float, dest: Vector3) -> Vector3:
+	var out: Vector3 = dir
+	var reach: float = minf(dist, 20.0)
+	for o in _obstacles:
+		if o.id == e.target or o.id == e.build_target:
+			continue
+		var to: Vector3 = o.pos - e.pos
+		to.y = 0.0
+		var ahead: float = to.dot(dir)
+		if ahead <= 0.0 or ahead > reach + o.radius:
+			continue
+		if _flat(dest, o.pos) < o.radius + 2.0:
+			continue # that is where we are going (drop-off, attack target)
+		var side: Vector3 = to - dir * ahead
+		var clearance: float = o.radius + e.radius + 2.0
+		var sl: float = side.length()
+		if sl < clearance:
+			var perp: Vector3 = Vector3(-dir.z, 0.0, dir.x)
+			var sgn: float = -1.0 if perp.dot(side) > 0.0 else 1.0
+			if sl < 0.2:
+				sgn = 1.0 if e.id % 2 == 0 else -1.0
+			out += perp * sgn * (1.0 - sl / clearance) * 1.8
+	return out.normalized()
 
 
 ## Completed buildings, power and tech per player.

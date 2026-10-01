@@ -36,6 +36,11 @@ func _initialize() -> void:
 	if sim.cmd_train(0, 1):
 		printerr("heavy units must need a war factory")
 		ok = false
+	var before: float = sim.money[0]
+	if not sim.cmd_untrain(0, 0) or sim.money[0] <= before:
+		printerr("cancelling a queued unit must refund it")
+		ok = false
+	sim.cmd_train(0, 0)
 	# a builder can place a power plant
 	var b_id: int = -1
 	for e in sim.ents.values():
