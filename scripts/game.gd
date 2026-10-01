@@ -362,7 +362,7 @@ func _sb(fill: Color, border: Color, bw: int, radius: int, margin: int) -> Style
 ## A command tile: live 3D portrait on top, name and price below. Call _tile_ready() once it is in the tree.
 func _tile(text: String, cb: Callable, entries: Array = []) -> Button:
 	var b: Button = Button.new()
-	b.custom_minimum_size = Vector2(78, 60)
+	b.custom_minimum_size = Vector2(80, 64)
 	b.clip_contents = true
 	b.pressed.connect(cb)
 	var vb: VBoxContainer = VBoxContainer.new()
@@ -389,7 +389,7 @@ func _tile(text: String, cb: Callable, entries: Array = []) -> Button:
 func _tile_ready(b: Button) -> void:
 	if b.has_meta("portrait"):
 		var p: Portrait = b.get_meta("portrait")
-		p.setup(b.get_meta("entries"), Vector2i(90, 54), 0.5)
+		p.setup(b.get_meta("entries"), Vector2i(70, 32), 0.5)
 
 
 func _empty_tile() -> PanelContainer:
