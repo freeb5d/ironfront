@@ -19,6 +19,17 @@ IronFront is a fast, readable RTS: pick a nation, build an army, and destroy eve
 
 > **Status:** early playable prototype. Core loop, lobby, bots and networking are in; base building, pathfinding and final art are next (see the [roadmap](#roadmap)).
 
+## Screenshots
+
+| | |
+|---|---|
+| ![Main menu](docs/screenshots/01_main_menu.png) | ![Choose your nation](docs/screenshots/03_nation_select.png) |
+| Main menu | Nation selection |
+| ![Skirmish lobby](docs/screenshots/04_lobby.png) | ![The 8-player map](docs/screenshots/12_overview.png) |
+| Lobby with match options | The 8-player map: oil in the centre, `$` fields on the edges |
+| ![Combat](docs/screenshots/13_combat.png) | ![Commander powers](docs/screenshots/16_powers.png) |
+| Combat with veteran rank insignia | Commander powers |
+
 ## Download & play
 
 1. Download **IronFront-Windows.zip** (or the Linux build) from the [**latest release**](https://github.com/freeb5d/ironfront/releases/latest) and unzip it.
