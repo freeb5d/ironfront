@@ -362,7 +362,8 @@ func _sb(fill: Color, border: Color, bw: int, radius: int, margin: int) -> Style
 ## A command tile: live 3D portrait on top, name and price below. Call _tile_ready() once it is in the tree.
 func _tile(text: String, cb: Callable, entries: Array = []) -> Button:
 	var b: Button = Button.new()
-	b.custom_minimum_size = Vector2(72, 72)
+	b.custom_minimum_size = Vector2(78, 60)
+	b.clip_contents = true
 	b.pressed.connect(cb)
 	var vb: VBoxContainer = VBoxContainer.new()
 	vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -377,7 +378,7 @@ func _tile(text: String, cb: Callable, entries: Array = []) -> Button:
 		b.set_meta("entries", entries)
 	var parts: PackedStringArray = text.split("\n")
 	for i in parts.size():
-		var l: Label = UI.label(parts[i], 12 if i == 0 else 10, UI.TEXT if i == 0 else Color("b9c6d6"))
+		var l: Label = UI.label(parts[i], 11 if i == 0 else 9, UI.TEXT if i == 0 else Color("b9c6d6"))
 		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		vb.add_child(l)
 		if i == 1:
@@ -537,7 +538,7 @@ func _build_hud_v2() -> void:
 	root.add_child(bottom_bar)
 	bottom_bar.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
 	bottom_bar.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	bottom_bar.custom_minimum_size = Vector2(0, 140)
+	bottom_bar.custom_minimum_size = Vector2(0, 120)
 	var row: HBoxContainer = HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
 	bottom_bar.add_child(row)
@@ -658,6 +659,7 @@ func _build_hud_v2() -> void:
 	info_label.bbcode_enabled = true
 	info_label.fit_content = true
 	info_label.scroll_active = false
+	info_label.add_theme_font_size_override("normal_font_size", 14)
 	info_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	rv.add_child(info_label)
 	unit_bar = ProgressBar.new()
