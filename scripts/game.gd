@@ -321,6 +321,19 @@ func _make_ground_texture() -> ImageTexture:
 			var z: float = (float(py) / n - 0.5) * 320.0
 			var nz: float = noise.get_noise_2d(x, z)
 			var c: Color = sand
+			if Data.map_id == 1: # Crossfire: temperate grass, dirt cross through the middle, rocky corners
+				c = Color(0.42, 0.55, 0.30).lerp(Color(0.50, 0.60, 0.33), clampf(nz * 2.0 + 0.5, 0.0, 1.0))
+				if Vector2(x, z).length() < 34.0 + nz * 6.0:
+					c = Color(0.58, 0.50, 0.38)
+				if absf(x) < 8.0 + nz * 2.0 or absf(z) < 8.0 + nz * 2.0:
+					c = Color(0.55, 0.46, 0.33)
+				if (absf(x) > 100.0 and absf(z) > 70.0) or (absf(z) > 100.0 and absf(x) > 70.0):
+					c = c.lerp(Color(0.52, 0.50, 0.45), 0.55)
+				c = Color(clampf(c.r + nz * 0.04, 0.0, 1.0), clampf(c.g + nz * 0.04, 0.0, 1.0), clampf(c.b + nz * 0.04, 0.0, 1.0))
+				if absf(x) > 152.0 or absf(z) > 152.0:
+					c = c.darkened(0.35)
+				img.set_pixel(px, py, c)
+				continue
 			if (absf(x) < 60.0 + nz * 8.0 and absf(z) > 72.0) or (absf(z) < 60.0 + nz * 8.0 and absf(x) > 78.0):
 				c = light
 			if absf(x) < 78.0 + nz * 10.0 and absf(z) < 66.0 + nz * 10.0:
@@ -1045,10 +1058,10 @@ func on_snapshot(snap: PackedFloat32Array, shots: PackedFloat32Array, money_p: P
 			elif kd == 0:
 				_flash_light(bpos, 6.0, 40.0, 0.5)
 				_play3d("boom", bpos, 4.0)
-				_burst(bpos, 60, 1.0, 0.6, Color(1.0, 0.45, 0.1), 14.0, Vector3(0, -8, 0))
+				_explosion(bpos, 2.2)
 			elif kd == 2 or kd >= 7:
 				_play3d("boom", bpos, -4.0)
-				_burst(bpos, 24, 0.7, 0.4, Color(1.0, 0.45, 0.1), 9.0, Vector3(0, -10, 0))
+				_explosion(bpos, 1.3 if kd == 2 else 1.7)
 			else:
 				_burst(bpos, 8, 0.4, 0.15, Color(0.85, 0.2, 0.1), 4.0, Vector3(0, -10, 0))
 			views[id].queue_free()
@@ -1511,10 +1524,10 @@ func _scatter_props() -> void:
 		for i in Data.MAX_SLOTS:
 			if p.distance_to(Data.slot_pos(i)) < 34.0:
 				blocked = true
-		for mp in Data.MONEY_NODES:
+		for mp in Data.money_nodes():
 			if p.distance_to(mp) < 16.0:
 				blocked = true
-		for op in Data.OIL_NODES:
+		for op in Data.oil_nodes():
 			if p.distance_to(op) < 16.0:
 				blocked = true
 		if blocked:
@@ -2037,6 +2050,7 @@ func _handle_fx(fx_p: PackedFloat32Array) -> void:
 		elif t == 2: # strike lands
 			_play3d("boom", pos, 4.0)
 			_flash_light(pos, 5.0, 30.0, 0.35)
+			_explosion(pos + Vector3(0, 1, 0), 2.0)
 			_burst(pos + Vector3(0, 1, 0), 80, 1.1, 0.8, Color(1.0, 0.5, 0.12), 20.0, Vector3(0, -9, 0))
 			_burst(pos + Vector3(0, 2, 0), 40, 1.4, 1.2, Color(0.25, 0.22, 0.2), 9.0, Vector3(0, 1, 0))
 		elif t == 3: # promotion sparkle
@@ -2059,6 +2073,7 @@ func _handle_fx(fx_p: PackedFloat32Array) -> void:
 		elif t == 6: # superweapon impact
 			_play3d("boom", pos, 10.0)
 			_flash_light(pos, 12.0, 90.0, 0.9)
+			_explosion(pos + Vector3(0, 2, 0), 4.0)
 			_burst(pos + Vector3(0, 1, 0), 160, 1.6, 1.2, Color(1.0, 0.55, 0.15), 30.0, Vector3(0, -8, 0))
 			_burst(pos + Vector3(0, 3, 0), 45, 2.0, 1.1, Color(0.3, 0.27, 0.25), 12.0, Vector3(0, 2, 0))
 			shake = 0.9
@@ -2080,6 +2095,8 @@ func _fx_material(col: Color) -> StandardMaterial3D:
 	var m: StandardMaterial3D = StandardMaterial3D.new()
 	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	m.albedo_color = col
+	if col.a < 1.0:
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	return m
 
 
@@ -2110,10 +2127,67 @@ func _spawn_shot(shooter: int, from: Vector3, to: Vector3, kind: int) -> void:
 	node.look_at(b)
 	projectiles.append({"n": node, "a": a, "b": b, "t": 0.0, "d": maxf(0.04, a.distance_to(b) / (40.0 if heavy else 85.0)), "heavy": heavy})
 	_burst(a, 8 if heavy else 5, 0.14, 0.5 if heavy else 0.28, Color(1.0, 0.9, 0.35), 4.0, Vector3.ZERO)
+	if heavy:
+		_flash_light(a, 2.5, 14.0, 0.12) # muzzle blast
+		_burst(a + dv.normalized() * 2.0, 5, 0.9, 0.55, Color(0.55, 0.53, 0.5, 0.55), 2.5, Vector3(0, 0.8, 0))
+		node.add_child(_trail())
+
+
+## Smoke trail that follows a cannon shell (particles stay where they were emitted).
+func _trail() -> CPUParticles3D:
+	var ps: CPUParticles3D = CPUParticles3D.new()
+	ps.amount = 10 if Net.low_fx else 18
+	ps.lifetime = 0.5
+	ps.local_coords = false
+	ps.spread = 25.0
+	ps.initial_velocity_min = 0.2
+	ps.initial_velocity_max = 1.0
+	ps.gravity = Vector3(0, 1.5, 0)
+	var sm: SphereMesh = SphereMesh.new()
+	sm.radius = 0.28
+	sm.height = 0.56
+	sm.radial_segments = 6
+	sm.rings = 3
+	sm.material = _fx_material(Color(0.8, 0.78, 0.74, 0.7))
+	ps.mesh = sm
+	ps.scale_amount_min = 0.5
+	ps.scale_amount_max = 1.1
+	var curve: Curve = Curve.new()
+	curve.add_point(Vector2(0, 1))
+	curve.add_point(Vector2(1, 0))
+	ps.scale_amount_curve = curve
+	ps.emitting = true
+	return ps
+
+
+## Layered explosion: flash, fireball, hot core, rising smoke, sparks and a ground shockwave.
+func _explosion(pos: Vector3, s: float) -> void:
+	_flash_light(pos, 3.0 + 3.0 * s, 14.0 + 16.0 * s, 0.3)
+	_burst(pos, int(14 + 14 * s), 0.55 + 0.2 * s, 0.7 * s, Color(1.0, 0.45, 0.1), 5.0 + 4.0 * s, Vector3(0, 1.5, 0)) # fireball
+	_burst(pos, int(6 + 6 * s), 0.35, 0.5 * s, Color(1.0, 0.92, 0.55), 3.0 + 2.0 * s, Vector3.ZERO) # hot core
+	_burst(pos + Vector3(0, 1.0, 0), int(8 + 8 * s), 1.8 + 0.5 * s, 1.0 * s, Color(0.2, 0.19, 0.18, 0.8), 2.5 + 1.5 * s, Vector3(0, 2.2, 0)) # smoke
+	_burst(pos, int(10 + 10 * s), 0.7, 0.14, Color(1.0, 0.8, 0.3), 12.0 + 6.0 * s, Vector3(0, -14, 0)) # sparks
+	if s >= 1.0:
+		var ring: MeshInstance3D = MeshInstance3D.new()
+		var cm: CylinderMesh = CylinderMesh.new()
+		cm.top_radius = 1.0
+		cm.bottom_radius = 1.0
+		cm.height = 0.1
+		ring.mesh = cm
+		var rm: StandardMaterial3D = _fx_material(Color(1.0, 0.8, 0.5, 0.5))
+		rm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		ring.material_override = rm
+		ring.position = Vector3(pos.x, 0.25, pos.z)
+		add_child(ring)
+		var tw: Tween = create_tween()
+		tw.set_parallel(true)
+		tw.tween_property(ring, "scale", Vector3(6.0 * s, 1.0, 6.0 * s), 0.45)
+		tw.tween_property(rm, "albedo_color:a", 0.0, 0.45)
+		tw.chain().tween_callback(ring.queue_free)
 
 
 func _burst(pos: Vector3, amount: int, life: float, size: float, col: Color, vel: float, grav: Vector3) -> void:
-	if get_tree().get_nodes_in_group("fx").size() > (25 if Net.low_fx else 50):
+	if get_tree().get_nodes_in_group("fx").size() > (35 if Net.low_fx else 80):
 		return
 	var ps: CPUParticles3D = CPUParticles3D.new()
 	ps.add_to_group("fx")
@@ -2126,6 +2200,10 @@ func _burst(pos: Vector3, amount: int, life: float, size: float, col: Color, vel
 	ps.initial_velocity_min = vel * 0.4
 	ps.initial_velocity_max = vel
 	ps.gravity = grav
+	var shrink: Curve = Curve.new() # particles shrink away instead of popping out
+	shrink.add_point(Vector2(0, 1.0))
+	shrink.add_point(Vector2(1, 0.1))
+	ps.scale_amount_curve = shrink
 	var sm: SphereMesh = SphereMesh.new()
 	sm.radius = size
 	sm.height = size * 2.0
@@ -2148,7 +2226,11 @@ func _update_projectiles(dt: float) -> void:
 		p["n"].position = p["a"].lerp(p["b"], f)
 		if f >= 1.0:
 			var heavy: bool = p["heavy"]
-			_burst(p["b"], 18 if heavy else 8, 0.45, 0.4 if heavy else 0.22, Color(1.0, 0.5, 0.12), 7.0 if heavy else 4.0, Vector3(0, -12, 0))
+			if heavy:
+				_explosion(p["b"], 0.55)
+			else:
+				_burst(p["b"], 6, 0.3, 0.16, Color(1.0, 0.75, 0.3), 5.0, Vector3(0, -12, 0)) # sparks
+				_burst(p["b"], 3, 0.7, 0.35, Color(0.45, 0.42, 0.38, 0.6), 1.5, Vector3(0, 1.5, 0)) # dust puff
 			p["n"].queue_free()
 			projectiles.remove_at(i)
 		i -= 1

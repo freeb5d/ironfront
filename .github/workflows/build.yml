@@ -48,7 +48,8 @@ jobs:
           apt-get install -y -qq xvfb libgl1-mesa-dri libglx-mesa0 libgl1 libegl1 libxcursor1 libxinerama1 libxi6 libxrandr2 libasound2 libpulse0 > /dev/null
           mkdir -p /tmp/shots
           SHOT_DIR=/tmp/shots LIBGL_ALWAYS_SOFTWARE=1 timeout 300 xvfb-run -a -s "-screen 0 1280x720x24" godot --path . --rendering-driver opengl3 --resolution 1280x720 -- --autotest 2>&1 | tee vis.log || true
-          ls -la /tmp/shots
+          IRONFRONT_MAP=1 SHOT_DIR=/tmp/shots/crossfire LIBGL_ALWAYS_SOFTWARE=1 timeout 300 xvfb-run -a -s "-screen 0 1280x720x24" godot --path . --rendering-driver opengl3 --resolution 1280x720 -- --autotest 2>&1 | tee vis2.log || true
+          ls -laR /tmp/shots
 
       - uses: actions/upload-artifact@v4
         if: always()

@@ -23,7 +23,7 @@ func _initialize() -> void:
 		if sc == null or not sc.can_instantiate():
 			printerr("script failed to compile: " + path)
 			ok = false
-	var expected: int = 8 * 8 + Data.MONEY_NODES.size() + Data.OIL_NODES.size()
+	var expected: int = 8 * 8 + Data.money_nodes().size() + Data.oil_nodes().size()
 	if sim.ents.size() != expected:
 		printerr("expected %d starting entities, got %d" % [expected, sim.ents.size()])
 		ok = false

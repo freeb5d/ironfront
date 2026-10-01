@@ -114,8 +114,9 @@ const OPTION_DEFS := {
 	"teams": {"label": "Teams", "values": ["ffa", "2t", "4t"], "names": ["Free for all", "2 teams of 4", "4 teams of 2"]},
 	"powers": {"label": "Commander powers", "values": [true, false], "names": ["On", "Off"]},
 	"fog": {"label": "Fog of war", "values": [false, true], "names": ["Off", "On"]},
+	"map": {"label": "Map", "values": [0, 1], "names": ["Twilight", "Crossfire"]},
 }
-const DEFAULT_OPTIONS := {"money": 500, "speed": 1.0, "unit_cap": 40, "start_units": 4, "teams": "ffa", "powers": true, "fog": false}
+const DEFAULT_OPTIONS := {"map": 0, "money": 500, "speed": 1.0, "unit_cap": 40, "start_units": 4, "teams": "ffa", "powers": true, "fog": false}
 
 
 # Single-player "Challenge" ladder. Player is always slot 0 (team 0); bots come from `bots`.
@@ -179,5 +180,31 @@ static func unit(country: String, idx: int) -> Dictionary:
 	return COUNTRIES[country]["units"][idx]
 
 
+## Selected map (0 = Twilight, 1 = Crossfire); set from the match options when a game begins.
+static var map_id: int = 0
+
+# Crossfire: two bases in each corner, money along the edges, oil in a cross through the middle.
+const SLOT_POS_B := [
+	Vector3(-175, 0, -120), Vector3(-120, 0, -175), Vector3(120, 0, -175), Vector3(175, 0, -120),
+	Vector3(175, 0, 120), Vector3(120, 0, 175), Vector3(-120, 0, 175), Vector3(-175, 0, 120),
+]
+const MONEY_NODES_B := [
+	Vector3(-205, 0, -205), Vector3(205, 0, -205), Vector3(205, 0, 205), Vector3(-205, 0, 205),
+	Vector3(0, 0, -205), Vector3(0, 0, 205), Vector3(-205, 0, 0), Vector3(205, 0, 0),
+	Vector3(-60, 0, -135), Vector3(60, 0, -135), Vector3(-60, 0, 135), Vector3(60, 0, 135),
+]
+const OIL_NODES_B := [
+	Vector3(0, 0, 0), Vector3(0, 0, -70), Vector3(0, 0, 70), Vector3(-70, 0, 0), Vector3(70, 0, 0),
+]
+
+
 static func slot_pos(i: int) -> Vector3:
-	return SLOT_POS[i]
+	return SLOT_POS_B[i] if map_id == 1 else SLOT_POS[i]
+
+
+static func money_nodes() -> Array:
+	return MONEY_NODES_B if map_id == 1 else MONEY_NODES
+
+
+static func oil_nodes() -> Array:
+	return OIL_NODES_B if map_id == 1 else OIL_NODES

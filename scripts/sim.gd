@@ -115,6 +115,7 @@ var _next_id: int = 1
 
 func setup(p_slots: Array, seed_value: int, opts: Dictionary = {}) -> void:
 	rand.seed = seed_value
+	Data.map_id = int(opts.get("map", 0))
 	slots = p_slots.duplicate(true)
 	unit_cap = int(opts.get("unit_cap", Data.UNIT_CAP))
 	powers_on = bool(opts.get("powers", true))
@@ -188,7 +189,7 @@ func _new_id() -> int:
 
 
 func _spawn_map() -> void:
-	for p in Data.MONEY_NODES:
+	for p in Data.money_nodes():
 		var e: Ent = Ent.new()
 		e.id = _new_id()
 		e.kind = 5
@@ -198,7 +199,7 @@ func _spawn_map() -> void:
 		e.max_hp = Data.MONEY_AMOUNT
 		e.radius = 2.5
 		ents[e.id] = e
-	for p in Data.OIL_NODES:
+	for p in Data.oil_nodes():
 		var o: Ent = Ent.new()
 		o.id = _new_id()
 		o.kind = 4

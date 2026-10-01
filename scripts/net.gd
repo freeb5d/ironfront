@@ -45,6 +45,8 @@ var _click_player: AudioStreamPlayer = null
 
 
 func _ready() -> void:
+	if OS.get_environment("IRONFRONT_MAP") != "": # CI uses this to screenshot the second map
+		options["map"] = int(OS.get_environment("IRONFRONT_MAP"))
 	load_settings()
 	apply_audio()
 	apply_video()
@@ -355,6 +357,7 @@ func start_game() -> void:
 func begin(s: Array, sd: int, o: Dictionary) -> void:
 	slots = s
 	options = o
+	Data.map_id = int(o.get("map", 0))
 	seed_value = sd
 	in_game = true
 	game_started.emit()
