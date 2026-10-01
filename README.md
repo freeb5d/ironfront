@@ -29,8 +29,8 @@ IronFront is a fast, readable RTS: pick a nation, build an army, and destroy eve
 | Lobby with match options | The 8-player map: oil in the centre, `$` fields on the edges |
 | ![Combat](docs/screenshots/13_combat.png) | ![Commander powers](docs/screenshots/16_powers.png) |
 | Combat with veteran rank insignia | Commander powers |
-| ![Crossfire map](docs/screenshots/crossfire_overview.png) | |
-| Second map, **Crossfire**: pick it in the lobby's match options | |
+| ![Crossfire map](docs/screenshots/crossfire_overview.png) | ![Construction progress](docs/screenshots/construction.png) |
+| Second map, **Crossfire**: pick it in the lobby's match options | Buildings show their build progress in % |
 
 ## Download & play
 
