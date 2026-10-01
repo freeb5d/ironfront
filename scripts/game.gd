@@ -229,6 +229,7 @@ func _slot_of(peer: int) -> int:
 # ------------------------------------------------------------------ world / hud
 
 func _build_world() -> void:
+	Data.map_id = int(Net.options.get("map", 0))
 	var env: Environment = Environment.new()
 	var sky_mat: ProceduralSkyMaterial = ProceduralSkyMaterial.new()
 	sky_mat.sky_top_color = Color(0.22, 0.42, 0.78)
