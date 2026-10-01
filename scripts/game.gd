@@ -2018,7 +2018,7 @@ func _handle_fx(fx_p: PackedFloat32Array) -> void:
 			_play3d("boom", pos, 10.0)
 			_flash_light(pos, 12.0, 90.0, 0.9)
 			_burst(pos + Vector3(0, 1, 0), 160, 1.6, 1.2, Color(1.0, 0.55, 0.15), 30.0, Vector3(0, -8, 0))
-			_burst(pos + Vector3(0, 3, 0), 80, 2.2, 2.0, Color(0.3, 0.27, 0.25), 14.0, Vector3(0, 2, 0))
+			_burst(pos + Vector3(0, 3, 0), 45, 2.0, 1.1, Color(0.3, 0.27, 0.25), 12.0, Vector3(0, 2, 0))
 			shake = 0.9
 		elif t == 7: # research finished
 			_burst(pos + Vector3(0, 6, 0), 40, 1.0, 0.3, Color(0.5, 0.9, 1.0), 10.0, Vector3(0, -3, 0))

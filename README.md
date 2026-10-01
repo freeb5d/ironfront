@@ -32,6 +32,9 @@ Bleeding-edge builds of every commit are also available as artifacts on the [Act
 - Fullscreen, Generals-style interface: command bar, framed minimap, money plate, event messages
 - 5 nations, 8 players, LAN / direct-IP multiplayer, bots with Easy / Normal / Hard difficulty
 - Base building like the classics: train a **Builder** (`B`), select it and construct a Power Plant (`Y`), Supply Depot (`U`), Barracks (`I`), War Factory (`O`) and Turrets (`P`)
+- Look and feel: sky and haze, dirt roads and concrete base pads, soft shadows under every unit, team-coloured rings and flags, light flashes on big explosions
+- Optional **fog of war** (match option): enemy units are hidden outside your vision, enemy buildings stay on the map once discovered
+- Units steer around buildings instead of grinding along walls
 - Research upgrades: Armor Plating, Weapon Tuning (need a Barracks) and Logistics
 - A nation-specific **Superweapon** (Orbital Cannon, Nuke Missile, Tactical Nuke, Jericho Strike, Scud Storm): needs a War Factory, long cooldown, 6-second warning ring, huge blast
 - Power management: buildings draw power, and on low power production slows down and turrets shut off
@@ -98,6 +101,7 @@ Destroy every enemy **headquarters**. A player whose HQ falls is eliminated and 
 | Minimap click / drag | Jump the camera |
 | **F11** | Toggle fullscreen |
 | **Ctrl + 1..9** / **1..9** | Set / recall a control group (press twice to jump the camera there) |
+| Right click a unit tile | Cancel one queued unit and get the money back |
 | Right click the minimap | Send the selected units there (Ctrl = attack-move) |
 | Double-click a unit | Select every visible unit of that type |
 | **Ctrl** + right click | Attack-move (fight everything on the way) |
