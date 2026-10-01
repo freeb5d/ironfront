@@ -2000,12 +2000,12 @@ func _update_rank(id: int, rank: int) -> void:
 	if rank > 0:
 		var tex: Texture2D = load("res://assets/ui/ranks/rank_%d.svg" % rank)
 		if tex != null:
-			var ry: float = float(v.get_node("hp").position.y) + 1.9
+			var ry: float = float(v.get_node("hp").position.y) + 1.3
 			var tint: Color = [Color(0.88, 0.58, 0.28), Color(0.86, 0.92, 1.0), Color(1.0, 0.85, 0.2)][rank - 1]
-			var back: Sprite3D = _rank_sprite(tex, Color(0, 0, 0, 0.8), 0.0078, ry, 0)
+			var back: Sprite3D = _rank_sprite(tex, Color(0, 0, 0, 0.8), 0.0042, ry, 0)
 			back.name = "rank_back"
 			v.add_child(back)
-			var front: Sprite3D = _rank_sprite(tex, tint, 0.0059, ry, 1)
+			var front: Sprite3D = _rank_sprite(tex, tint, 0.0032, ry, 1)
 			front.name = "rank"
 			v.add_child(front)
 
