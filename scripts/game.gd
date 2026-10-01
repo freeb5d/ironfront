@@ -58,6 +58,7 @@ var super_tile: Button
 var upg_tiles: Array = []
 var shake: float = 0.0
 var tips_shown: Dictionary = {}
+var rank_override: Dictionary = {} # test hook: force a rank on a unit
 var fog_on: bool = false
 var hidden: Dictionary = {}     # enemy entities currently hidden by the fog
 var seen_buildings: Dictionary = {}
@@ -134,6 +135,22 @@ func _autotest_finish() -> void:
 	_handle_fx(PackedFloat32Array([5.0, hq_at.x + 25.0, hq_at.z + 25.0, 6.0, hq_at.x + 40.0, hq_at.z + 25.0, 7.0, hq_at.x, hq_at.z]))
 	await get_tree().create_timer(0.8).timeout
 	await Net.shot("17_base")
+	# close-up of the three rank insignia
+	var rk: int = 1
+	var first_pos: Vector3 = Vector3.ZERO
+	for id in info:
+		if rk > 3:
+			break
+		if info[id][1] == my_slot and info[id][0] == 1:
+			rank_override[id] = rk
+			if rk == 1:
+				first_pos = targets[id]
+			rk += 1
+	cam_pivot.position = first_pos
+	zoom = 24.0
+	_update_cam()
+	await get_tree().create_timer(0.6).timeout
+	await Net.shot("18_ranks")
 	# overview of the whole map
 	var keep_pivot: Vector3 = cam_pivot.position
 	zoom = 140.0
@@ -1012,7 +1029,7 @@ func on_snapshot(snap: PackedFloat32Array, shots: PackedFloat32Array, money_p: P
 		if int(views[id].get_meta("owner", -99)) != owner:
 			_set_owner(id, owner)
 		_update_hp(id, kind, frac)
-		_update_rank(id, rank)
+		_update_rank(id, int(rank_override.get(id, rank)))
 	for id in views.keys():
 		if not seen.has(id):
 			var kd: int = info[id][0]
