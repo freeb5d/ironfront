@@ -87,6 +87,7 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: dl
@@ -95,5 +96,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           (cd dl && zip -r ../IronFront-Windows.zip IronFront-Windows && zip -r ../IronFront-Linux.zip IronFront-Linux)
+          # release notes = this version's section of CHANGELOG.md; the build fails if it is missing
+          awk -v v="## ${{ github.ref_name }}" '$0==v{f=1;next} /^## /{f=0} f' CHANGELOG.md > notes.md
+          test -s notes.md || { echo "CHANGELOG.md has no section for ${{ github.ref_name }}"; exit 1; }
+          echo "" >> notes.md
+          echo "Full changelog: https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md" >> notes.md
           gh release create "${{ github.ref_name }}" IronFront-Windows.zip IronFront-Linux.zip \
-            --repo "${{ github.repository }}" --title "IronFront ${{ github.ref_name }}" --generate-notes
+            --repo "${{ github.repository }}" --title "IronFront ${{ github.ref_name }}" --notes-file notes.md
