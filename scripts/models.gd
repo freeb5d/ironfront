@@ -73,13 +73,14 @@ static func place(parent: Node, path: String, pos: Vector3, size: float, by_h: b
 static func realify(inst: Node, path: String) -> void:
 	var is_tree: bool = path.contains("/tree")
 	var is_rock: bool = path.contains("rocks") or path.contains("stones")
-	if not is_tree and not is_rock:
+	var is_truck: bool = path.contains("missile_truck")
+	if not is_tree and not is_rock and not is_truck:
 		return
 	var rock_mat: StandardMaterial3D = null
 	if is_rock:
 		rock_mat = StandardMaterial3D.new()
 		rock_mat.albedo_texture = load("res://assets/terrain/rock.jpg")
-		rock_mat.albedo_color = Color(0.85, 0.82, 0.78)
+		rock_mat.albedo_color = Color(1.7, 1.62, 1.5)
 		rock_mat.uv1_triplanar = true
 		rock_mat.uv1_scale = Vector3(0.18, 0.18, 0.18)
 		rock_mat.roughness = 1.0
@@ -88,7 +89,14 @@ static func realify(inst: Node, path: String) -> void:
 		if mi.mesh == null:
 			continue
 		for s in mi.mesh.get_surface_count():
-			if is_rock:
+			if is_truck:
+				if mi.get_surface_override_material(s) == null: # keep the launcher parts, paint the truck olive
+					var tm: Material = mi.mesh.surface_get_material(s)
+					if tm is BaseMaterial3D:
+						var olive: BaseMaterial3D = tm.duplicate()
+						olive.albedo_color = Color(0.5, 0.56, 0.38)
+						mi.set_surface_override_material(s, olive)
+			elif is_rock:
 				mi.set_surface_override_material(s, rock_mat)
 			else:
 				var src: Material = mi.mesh.surface_get_material(s)

@@ -6,7 +6,7 @@ Each version needs a `## vX.Y.Z` section here; the release job publishes that se
 ## v0.13.0
 ### Added
 - **Construction progress**: a percentage label floats above every building while it is being built.
-- **New Iranian Missile Truck**: a flatbed truck (Kenney Car Kit, CC0) with a twin-missile launcher, replacing the old container-like vehicle.
+- **New Iranian Missile Truck**: a flatbed truck (Kenney Car Kit, CC0) with a twin-missile launcher, painted army olive, replacing the old container-like vehicle.
 ### Changed
 - More natural props: trees are now green instead of teal, boulders use a real rock texture (Poly Haven, CC0).
 - The main menu background uses the real sand texture and the new props.
