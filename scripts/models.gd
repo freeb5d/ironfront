@@ -80,7 +80,7 @@ static func realify(inst: Node, path: String) -> void:
 	if is_rock:
 		rock_mat = StandardMaterial3D.new()
 		rock_mat.albedo_texture = load("res://assets/terrain/rock.jpg")
-		rock_mat.albedo_color = Color(1.7, 1.62, 1.5)
+		rock_mat.albedo_color = Color(1.15, 1.12, 1.1)
 		rock_mat.uv1_triplanar = true
 		rock_mat.uv1_scale = Vector3(0.18, 0.18, 0.18)
 		rock_mat.roughness = 1.0

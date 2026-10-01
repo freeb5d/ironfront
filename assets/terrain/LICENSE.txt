@@ -1,1 +1,1 @@
-grass.jpg = leafy_grass, sand.jpg = aerial_sand, rock.jpg = rocky_terrain_02 (all Poly Haven, CC0)
+grass.jpg = leafy_grass, sand.jpg = aerial_sand, rock.jpg = rock_boulder_dry (all Poly Haven, CC0)
