@@ -1,0 +1,2 @@
+Terrain textures from Poly Haven (https://polyhaven.com), licensed CC0 (public domain).
+grass.jpg = grass_path_2, sand.jpg = aerial_sand

@@ -260,10 +260,9 @@ func _build_world() -> void:
 	var pm: PlaneMesh = PlaneMesh.new()
 	pm.size = Vector2(Data.MAP_SIZE + 30.0, Data.MAP_SIZE + 30.0)
 	ground.mesh = pm
-	var gm: StandardMaterial3D = StandardMaterial3D.new()
+	var gm: ShaderMaterial = ShaderMaterial.new()
 	ground_tex = _make_ground_texture()
-	gm.albedo_texture = ground_tex
-	gm.roughness = 1.0
+	_setup_ground_material(gm)
 	ground.material_override = gm
 	add_child(ground)
 
@@ -273,7 +272,7 @@ func _build_world() -> void:
 	opm.size = Vector2(2600, 2600)
 	outer.mesh = opm
 	var omat: StandardMaterial3D = StandardMaterial3D.new()
-	omat.albedo_color = Color(0.5, 0.42, 0.31)
+	omat.albedo_color = Color(0.3, 0.38, 0.22) if Data.map_id == 1 else Color(0.5, 0.42, 0.31)
 	omat.roughness = 1.0
 	outer.material_override = omat
 	outer.position.y = -0.15
@@ -302,6 +301,35 @@ func _build_world() -> void:
 	cam_pivot.add_child(cam)
 	cam.make_current()
 
+
+
+## The painted map (zones, roads, pads) is multiplied with a tiled real-photo texture (Poly Haven, CC0),
+## so the ground has true sand / grass detail close up while keeping the painted layout.
+func _setup_ground_material(gm: ShaderMaterial) -> void:
+	var sh: Shader = Shader.new()
+	sh.code = """shader_type spatial;
+uniform sampler2D paint : source_color, filter_linear_mipmap;
+uniform sampler2D detail : source_color, filter_linear_mipmap, repeat_enable;
+uniform float tiles = 50.0;
+uniform float strength = 1.0;
+void fragment() {
+	vec3 p = texture(paint, UV).rgb;
+	vec3 d1 = texture(detail, UV * tiles).rgb;
+	vec3 d2 = texture(detail, UV * tiles * 0.37 + vec2(0.31, 0.57)).rgb;
+	vec3 d = mix(d1, d2, 0.4);
+	vec3 avg = textureLod(detail, vec2(0.5), 10.0).rgb;
+	float lr = dot(d, vec3(0.333)) / max(dot(avg, vec3(0.333)), 0.02);
+	vec3 cr = d / max(avg, vec3(0.02));
+	vec3 ratio = mix(vec3(lr), cr, 0.35);
+	ALBEDO = clamp(p * mix(vec3(1.0), ratio, strength), 0.0, 1.0);
+	ROUGHNESS = 1.0;
+}
+"""
+	gm.shader = sh
+	gm.set_shader_parameter("paint", ground_tex)
+	gm.set_shader_parameter("detail", load("res://assets/terrain/grass.jpg" if Data.map_id == 1 else "res://assets/terrain/sand.jpg"))
+	gm.set_shader_parameter("tiles", (Data.MAP_SIZE + 30.0) / 9.0)
+	gm.set_shader_parameter("strength", 1.0)
 
 
 func _make_ground_texture() -> ImageTexture:

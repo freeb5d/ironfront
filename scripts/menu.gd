@@ -296,8 +296,13 @@ func _build_main() -> void:
 	v.add_child(spacer)
 	var ips: Label = UI.label("Your address: " + ", ".join(_local_ips()) + "    UDP port %d    F11 fullscreen    v%s" % [Net.PORT, str(ProjectSettings.get_setting("application/config/version", ""))], 15, Color("7d8a9b"))
 	v.add_child(ips)
-	var credit: Label = UI.label("Art: Kenney, Quaternius, Skoll (game-icons.net), Rajdhani font  -  see README for credits", 13, Color("5f6b7a"))
-	v.add_child(credit)
+	var made: HBoxContainer = HBoxContainer.new()
+	made.add_theme_constant_override("separation", 6)
+	made.add_child(UI.label("Made with", 14, Color("8a97a8")))
+	var heart: Heart = Heart.new()
+	made.add_child(heart)
+	made.add_child(UI.label("by Kaveh", 14, Color("8a97a8")))
+	v.add_child(made)
 
 
 func _on_join_pressed() -> void:
