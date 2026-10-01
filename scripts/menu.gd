@@ -190,13 +190,16 @@ func _screen_left(id: String) -> VBoxContainer:
 	var m: MarginContainer = MarginContainer.new()
 	add_child(m)
 	m.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	m.add_theme_constant_override("margin_left", 110)
-	m.add_theme_constant_override("margin_top", 56)
-	m.add_theme_constant_override("margin_bottom", 36)
+	m.add_theme_constant_override("margin_left", 100)
+	m.add_theme_constant_override("margin_top", 24)
+	m.add_theme_constant_override("margin_bottom", 14)
+	var sc: ScrollContainer = ScrollContainer.new() # scrolls on very small screens instead of cutting the menu off
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	m.add_child(sc)
 	var v: VBoxContainer = VBoxContainer.new()
-	v.add_theme_constant_override("separation", 10)
+	v.add_theme_constant_override("separation", 6)
 	v.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	m.add_child(v)
+	sc.add_child(v)
 	m.visible = false
 	screens[id] = m
 	return v
@@ -224,7 +227,7 @@ func _show(id: String) -> void:
 func _btn(text: String, cb: Callable, width: float = 360.0, left: bool = false) -> Button:
 	var b: Button = Button.new()
 	b.text = text
-	b.custom_minimum_size = Vector2(width, 54)
+	b.custom_minimum_size = Vector2(width, 48)
 	if left:
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	b.pressed.connect(cb)
@@ -256,7 +259,7 @@ func _build_main() -> void:
 	var title: Label = Label.new()
 	title.text = "IRONFRONT"
 	title.add_theme_font_override("font", UI.spaced("bold", 12))
-	title.add_theme_font_size_override("font_size", 104)
+	title.add_theme_font_size_override("font_size", 82)
 	title.add_theme_color_override("font_color", UI.ACCENT)
 	title.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.6))
 	title.add_theme_constant_override("outline_size", 10)
@@ -265,13 +268,13 @@ func _build_main() -> void:
 	sub.add_theme_font_override("font", UI.spaced("semibold", 4))
 	v.add_child(sub)
 	var gap: Control = Control.new()
-	gap.custom_minimum_size = Vector2(0, 26)
+	gap.custom_minimum_size = Vector2(0, 8)
 	v.add_child(gap)
 
 	name_edit = LineEdit.new()
 	name_edit.placeholder_text = "Commander name"
 	name_edit.text = "Commander"
-	name_edit.custom_minimum_size = Vector2(420, 46)
+	name_edit.custom_minimum_size = Vector2(420, 42)
 	v.add_child(name_edit)
 
 	v.add_child(_btn("PLAY OFFLINE  -  VS 7 BOTS", _pick.bind(OFFLINE), 420.0, true))
@@ -280,7 +283,7 @@ func _build_main() -> void:
 
 	ip_edit = LineEdit.new()
 	ip_edit.placeholder_text = "Host IP address  (e.g. 192.168.1.20)"
-	ip_edit.custom_minimum_size = Vector2(420, 46)
+	ip_edit.custom_minimum_size = Vector2(420, 42)
 	v.add_child(ip_edit)
 	v.add_child(_btn("JOIN GAME", _on_join_pressed, 420.0, true))
 	v.add_child(_btn("SETTINGS", _show.bind("settings"), 420.0, true))
@@ -291,8 +294,10 @@ func _build_main() -> void:
 	var spacer: Control = Control.new()
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	v.add_child(spacer)
-	var ips: Label = UI.label("Your address: " + ", ".join(_local_ips()) + "    UDP port %d    F11 fullscreen    v0.2" % Net.PORT, 15, Color("7d8a9b"))
+	var ips: Label = UI.label("Your address: " + ", ".join(_local_ips()) + "    UDP port %d    F11 fullscreen    v%s" % [Net.PORT, str(ProjectSettings.get_setting("application/config/version", ""))], 15, Color("7d8a9b"))
 	v.add_child(ips)
+	var credit: Label = UI.label("Art: Kenney, Quaternius, Skoll (game-icons.net), Rajdhani font  -  see README for credits", 13, Color("5f6b7a"))
+	v.add_child(credit)
 
 
 func _on_join_pressed() -> void:
