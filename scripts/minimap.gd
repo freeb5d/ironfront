@@ -2,7 +2,7 @@ class_name MiniMap
 extends Control
 ## Corner minimap. Reads the view state of the owning Game node; click or drag to move the camera.
 
-const WORLD := 300.0
+const WORLD := Data.MAP_SIZE
 
 var game: Node = null
 var bg: Texture2D = null
@@ -21,7 +21,7 @@ func _draw() -> void:
 	if bg != null:
 		# the ground texture covers -160..160, the playable map is -150..150
 		var tw: float = float(bg.get_width())
-		var margin: float = tw * 10.0 / 320.0
+		var margin: float = tw * 15.0 / (Data.MAP_SIZE + 30.0)
 		draw_texture_rect_region(bg, Rect2(Vector2.ZERO, size), Rect2(margin, margin, tw - 2.0 * margin, tw - 2.0 * margin))
 	else:
 		draw_rect(Rect2(Vector2.ZERO, size), Color(0.09, 0.15, 0.1))

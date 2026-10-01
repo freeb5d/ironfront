@@ -318,7 +318,7 @@ func cmd_stop(slot: int, ids: Array) -> void:
 
 
 func spot_ok(pos: Vector3, r: float, slot: int) -> bool:
-	if absf(pos.x) > 140.0 or absf(pos.z) > 140.0:
+	if absf(pos.x) > Data.MAP_HALF - 10.0 or absf(pos.z) > Data.MAP_HALF - 10.0:
 		return false
 	if _flat(pos, hq_pos[slot]) > BASE_ZONE:
 		return false
@@ -405,7 +405,7 @@ func cmd_power(slot: int, idx: int, pos: Vector3) -> bool:
 		return false
 	match idx:
 		0:
-			var p: Vector3 = Vector3(clampf(pos.x, -150.0, 150.0), 0.0, clampf(pos.z, -150.0, 150.0))
+			var p: Vector3 = Vector3(clampf(pos.x, -Data.MAP_HALF, Data.MAP_HALF), 0.0, clampf(pos.z, -Data.MAP_HALF, Data.MAP_HALF))
 			strikes.append({"t": STRIKE_DELAY, "pos": p, "slot": slot})
 			fx.append(1.0)
 			fx.append(p.x)
@@ -427,7 +427,7 @@ func _fire_super(slot: int, pos: Vector3) -> bool:
 		return false
 	if int(comp[slot].get(12, 0)) == 0 or super_cd[slot] > 0.0:
 		return false
-	var p: Vector3 = Vector3(clampf(pos.x, -150.0, 150.0), 0.0, clampf(pos.z, -150.0, 150.0))
+	var p: Vector3 = Vector3(clampf(pos.x, -Data.MAP_HALF, Data.MAP_HALF), 0.0, clampf(pos.z, -Data.MAP_HALF, Data.MAP_HALF))
 	strikes.append({"t": Data.SUPER_DELAY, "pos": p, "slot": slot, "r": Data.SUPER_RADIUS, "dmg": Data.SUPER_DAMAGE})
 	fx.append(5.0)
 	fx.append(p.x)

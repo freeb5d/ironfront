@@ -257,7 +257,7 @@ func _build_world() -> void:
 
 	var ground: MeshInstance3D = MeshInstance3D.new()
 	var pm: PlaneMesh = PlaneMesh.new()
-	pm.size = Vector2(320, 320)
+	pm.size = Vector2(Data.MAP_SIZE + 30.0, Data.MAP_SIZE + 30.0)
 	ground.mesh = pm
 	var gm: StandardMaterial3D = StandardMaterial3D.new()
 	ground_tex = _make_ground_texture()
@@ -269,7 +269,7 @@ func _build_world() -> void:
 	# a dark outer plain so the map edge never shows the sky, and a low rock rim around the playable area
 	var outer: MeshInstance3D = MeshInstance3D.new()
 	var opm: PlaneMesh = PlaneMesh.new()
-	opm.size = Vector2(1800, 1800)
+	opm.size = Vector2(2600, 2600)
 	outer.mesh = opm
 	var omat: StandardMaterial3D = StandardMaterial3D.new()
 	omat.albedo_color = Color(0.5, 0.42, 0.31)
@@ -284,10 +284,10 @@ func _build_world() -> void:
 		var wall: MeshInstance3D = MeshInstance3D.new()
 		var wm: BoxMesh = BoxMesh.new()
 		var along_x: bool = side < 2
-		wm.size = Vector3(330.0, 5.0, 8.0) if along_x else Vector3(8.0, 5.0, 330.0)
+		wm.size = Vector3(Data.MAP_SIZE + 40.0, 5.0, 8.0) if along_x else Vector3(8.0, 5.0, Data.MAP_SIZE + 40.0)
 		wall.mesh = wm
 		wall.material_override = rock
-		var off: float = 156.0 * (1.0 if side % 2 == 0 else -1.0)
+		var off: float = (Data.MAP_HALF + 6.0) * (1.0 if side % 2 == 0 else -1.0)
 		wall.position = Vector3(0.0, 2.0, off) if along_x else Vector3(off, 2.0, 0.0)
 		add_child(wall)
 
@@ -305,7 +305,8 @@ func _build_world() -> void:
 
 func _make_ground_texture() -> ImageTexture:
 	# desert map: light edge strips, a sunken dark centre and a dark road across the middle
-	var n: int = 384
+	var n: int = 512
+	var span: float = Data.MAP_SIZE + 30.0 # the painting below uses the original 320 unit layout
 	var img: Image = Image.create(n, n, false, Image.FORMAT_RGB8)
 	var noise: FastNoiseLite = FastNoiseLite.new()
 	noise.seed = 11
@@ -333,14 +334,14 @@ func _make_ground_texture() -> ImageTexture:
 			img.set_pixel(px, py, c)
 	for si in Data.MAX_SLOTS:
 		var base: Vector3 = Data.slot_pos(si)
-		for stp in 70: # dirt road from the base towards the middle
-			var tp: Vector3 = base.lerp(Vector3.ZERO, float(stp) / 70.0 * 0.78)
-			var cxp: int = int((tp.x / 320.0 + 0.5) * n)
-			var czp: int = int((tp.z / 320.0 + 0.5) * n)
+		for stp in 110: # dirt road from the base towards the middle
+			var tp: Vector3 = base.lerp(Vector3.ZERO, float(stp) / 110.0 * 0.78)
+			var cxp: int = int((tp.x / span + 0.5) * n)
+			var czp: int = int((tp.z / span + 0.5) * n)
 			img.fill_rect(Rect2i(cxp - 3, czp - 3, 7, 7), Color(0.62, 0.52, 0.37))
 			img.fill_rect(Rect2i(cxp - 1, czp - 1, 3, 3), Color(0.57, 0.47, 0.33))
-		var bpx: int = int((base.x / 320.0 + 0.5) * n)
-		var bpz: int = int((base.z / 320.0 + 0.5) * n)
+		var bpx: int = int((base.x / span + 0.5) * n)
+		var bpz: int = int((base.z / span + 0.5) * n)
 		img.fill_rect(Rect2i(bpx - 17, bpz - 17, 34, 34), Color(0.47, 0.46, 0.44)) # concrete pad
 		img.fill_rect(Rect2i(bpx - 15, bpz - 15, 30, 30), Color(0.58, 0.57, 0.54))
 	return ImageTexture.create_from_image(img)
@@ -361,7 +362,7 @@ func _sb(fill: Color, border: Color, bw: int, radius: int, margin: int) -> Style
 ## A command tile: live 3D portrait on top, name and price below. Call _tile_ready() once it is in the tree.
 func _tile(text: String, cb: Callable, entries: Array = []) -> Button:
 	var b: Button = Button.new()
-	b.custom_minimum_size = Vector2(98, 98)
+	b.custom_minimum_size = Vector2(72, 72)
 	b.pressed.connect(cb)
 	var vb: VBoxContainer = VBoxContainer.new()
 	vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -376,7 +377,7 @@ func _tile(text: String, cb: Callable, entries: Array = []) -> Button:
 		b.set_meta("entries", entries)
 	var parts: PackedStringArray = text.split("\n")
 	for i in parts.size():
-		var l: Label = UI.label(parts[i], 15 if i == 0 else 13, UI.TEXT if i == 0 else Color("b9c6d6"))
+		var l: Label = UI.label(parts[i], 12 if i == 0 else 10, UI.TEXT if i == 0 else Color("b9c6d6"))
 		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		vb.add_child(l)
 		if i == 1:
@@ -501,9 +502,9 @@ func _build_hud_v2() -> void:
 	msg_label.bbcode_enabled = true
 	msg_label.fit_content = true
 	msg_label.scroll_active = false
-	msg_label.custom_minimum_size = Vector2(560, 0)
+	msg_label.custom_minimum_size = Vector2(460, 0)
 	msg_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	msg_label.add_theme_font_size_override("normal_font_size", 22)
+	msg_label.add_theme_font_size_override("normal_font_size", 17)
 	msg_label.add_theme_constant_override("outline_size", 6)
 	msg_label.add_theme_color_override("font_outline_color", Color.BLACK)
 	msg_label.position = Vector2(16, 12)
@@ -522,7 +523,9 @@ func _build_hud_v2() -> void:
 	players_label.bbcode_enabled = true
 	players_label.fit_content = true
 	players_label.scroll_active = false
-	players_label.custom_minimum_size = Vector2(300, 0)
+	players_label.custom_minimum_size = Vector2(220, 0)
+	players_label.add_theme_font_size_override("normal_font_size", 14)
+	players_label.add_theme_font_size_override("bold_font_size", 14)
 	players_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	pl.add_child(players_label)
 
@@ -534,7 +537,7 @@ func _build_hud_v2() -> void:
 	root.add_child(bottom_bar)
 	bottom_bar.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
 	bottom_bar.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	bottom_bar.custom_minimum_size = Vector2(0, 190)
+	bottom_bar.custom_minimum_size = Vector2(0, 140)
 	var row: HBoxContainer = HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
 	bottom_bar.add_child(row)
@@ -546,7 +549,7 @@ func _build_hud_v2() -> void:
 	minimap = MiniMap.new()
 	minimap.game = self
 	minimap.bg = ground_tex
-	minimap.custom_minimum_size = Vector2(200, 200)
+	minimap.custom_minimum_size = Vector2(150, 150)
 	frame.add_child(minimap)
 
 	# command tiles in the centre
@@ -646,11 +649,11 @@ func _build_hud_v2() -> void:
 	rh.add_theme_constant_override("separation", 10)
 	right.add_child(rh)
 	var rv: VBoxContainer = VBoxContainer.new()
-	rv.custom_minimum_size = Vector2(230, 0)
+	rv.custom_minimum_size = Vector2(170, 0)
 	rh.add_child(rv)
 	var cname: String = Net.slots[my_slot]["country"] if my_slot >= 0 else "Spectator"
 	var ccol: Color = Data.PLAYER_COLORS[maxi(my_slot, 0)]
-	rv.add_child(UI.label(cname.to_upper(), 30, ccol))
+	rv.add_child(UI.label(cname.to_upper(), 22, ccol))
 	info_label = RichTextLabel.new()
 	info_label.bbcode_enabled = true
 	info_label.fit_content = true
@@ -661,14 +664,14 @@ func _build_hud_v2() -> void:
 	unit_bar.fill_mode = ProgressBar.FILL_BOTTOM_TO_TOP
 	unit_bar.show_percentage = false
 	unit_bar.max_value = int(Net.options.get("unit_cap", Data.UNIT_CAP))
-	unit_bar.custom_minimum_size = Vector2(22, 120)
+	unit_bar.custom_minimum_size = Vector2(16, 90)
 	rh.add_child(unit_bar)
 
 	# money plate above the bar
 	plate = PanelContainer.new()
 	plate.add_theme_stylebox_override("panel", _sb(Color(0.05, 0.08, 0.12, 0.97), Color(0.55, 0.70, 0.85), 3, 8, 8))
 	root.add_child(plate)
-	money_label = UI.label("$ 0", 30, Color(0.4, 1.0, 0.5))
+	money_label = UI.label("$ 0", 22, Color(0.4, 1.0, 0.5))
 	plate.add_child(money_label)
 
 	# centre status (victory / defeat)
@@ -954,8 +957,8 @@ func _process(dt: float) -> void:
 			var g = _ground_point(m)
 			if g != null:
 				cam_pivot.position += Vector3(pan_anchor.x - g.x, 0.0, pan_anchor.z - g.z)
-				cam_pivot.position.x = clampf(cam_pivot.position.x, -150.0, 150.0)
-				cam_pivot.position.z = clampf(cam_pivot.position.z, -150.0, 150.0)
+				cam_pivot.position.x = clampf(cam_pivot.position.x, -Data.MAP_HALF, Data.MAP_HALF)
+				cam_pivot.position.z = clampf(cam_pivot.position.z, -Data.MAP_HALF, Data.MAP_HALF)
 		drag_rect.visible = moved and box_mode
 		if drag_rect.visible:
 			drag_rect.position = Vector2(minf(drag_start.x, m.x), minf(drag_start.y, m.y))
@@ -1495,11 +1498,11 @@ func _scatter_props() -> void:
 	var rocks: Array = ["res://assets/props/rocks-high.glb", "res://assets/props/rocks-low.glb", "res://assets/props/stones.glb"]
 	var placed: int = 0
 	var attempts: int = 0
-	while placed < (50 if Net.low_fx else 100) and attempts < 800:
+	while placed < (80 if Net.low_fx else 170) and attempts < 1600:
 		attempts += 1
 		var a: float = r.randf() * TAU
-		var rad: float = r.randf_range(30.0, 150.0)
-		if rad < 105.0 and r.randf() < 0.85:
+		var rad: float = r.randf_range(45.0, 225.0)
+		if rad < 157.0 and r.randf() < 0.85:
 			continue # keep the battle lanes mostly clear
 		var p: Vector3 = Vector3(cos(a) * rad, 0.0, sin(a) * rad)
 		var blocked: bool = false
@@ -1765,7 +1768,7 @@ func _own_hq_pos() -> Vector3:
 
 
 func _spot_ok_client(pos: Vector3, r: float) -> bool:
-	if absf(pos.x) > 140.0 or absf(pos.z) > 140.0:
+	if absf(pos.x) > Data.MAP_HALF - 10.0 or absf(pos.z) > Data.MAP_HALF - 10.0:
 		return false
 	var hq: Vector3 = _own_hq_pos()
 	if Vector2(pos.x - hq.x, pos.z - hq.z).length() > Sim.BASE_ZONE:
@@ -2178,8 +2181,8 @@ func _pan_camera(dt: float) -> void:
 		if m.y >= sz.y - 4.0:
 			dir.y += 1.0
 	cam_pivot.position += Vector3(dir.x, 0, dir.y) * zoom * 1.2 * dt * Net.cam_speed
-	cam_pivot.position.x = clampf(cam_pivot.position.x, -150.0, 150.0)
-	cam_pivot.position.z = clampf(cam_pivot.position.z, -150.0, 150.0)
+	cam_pivot.position.x = clampf(cam_pivot.position.x, -Data.MAP_HALF, Data.MAP_HALF)
+	cam_pivot.position.z = clampf(cam_pivot.position.z, -Data.MAP_HALF, Data.MAP_HALF)
 
 
 # ------------------------------------------------------------------ input
@@ -2225,10 +2228,10 @@ func _unhandled_input(ev: InputEvent) -> void:
 				else:
 					_right_click(ev.position)
 		elif ev.button_index == MOUSE_BUTTON_WHEEL_UP and ev.pressed:
-			zoom = clampf(zoom - 6.0 * Net.zoom_speed, 20.0, 140.0)
+			zoom = clampf(zoom - 6.0 * Net.zoom_speed, 20.0, 200.0)
 			_update_cam()
 		elif ev.button_index == MOUSE_BUTTON_WHEEL_DOWN and ev.pressed:
-			zoom = clampf(zoom + 6.0 * Net.zoom_speed, 20.0, 140.0)
+			zoom = clampf(zoom + 6.0 * Net.zoom_speed, 20.0, 200.0)
 			_update_cam()
 	elif ev is InputEventKey and ev.pressed and not ev.echo:
 		if ev.keycode == KEY_Q:

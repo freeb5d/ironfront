@@ -18,17 +18,19 @@ const PLAYER_COLORS := [
 
 # Map layout (world units, map spans -150..150). Two bases per side, money fields ($) around the
 # edges, five oil derricks in the sunken centre.
+const MAP_HALF := 225.0 # the playable map spans -MAP_HALF..MAP_HALF on both axes
+const MAP_SIZE := 450.0
 const SLOT_POS := [
-	Vector3(-45, 0, -112), Vector3(45, 0, -112), Vector3(118, 0, -48), Vector3(118, 0, 48),
-	Vector3(45, 0, 112), Vector3(-45, 0, 112), Vector3(-118, 0, 48), Vector3(-118, 0, -48),
+	Vector3(-67.5, 0, -168), Vector3(67.5, 0, -168), Vector3(177, 0, -72), Vector3(177, 0, 72),
+	Vector3(67.5, 0, 168), Vector3(-67.5, 0, 168), Vector3(-177, 0, 72), Vector3(-177, 0, -72),
 ]
 const MONEY_NODES := [
-	Vector3(-135, 0, -130), Vector3(135, 0, -130), Vector3(-135, 0, 130), Vector3(135, 0, 130),
-	Vector3(-72, 0, -130), Vector3(72, 0, -130), Vector3(-72, 0, 130), Vector3(72, 0, 130),
-	Vector3(-138, 0, -68), Vector3(138, 0, -68), Vector3(-138, 0, 68), Vector3(138, 0, 68),
+	Vector3(-202.5, 0, -195), Vector3(202.5, 0, -195), Vector3(-202.5, 0, 195), Vector3(202.5, 0, 195),
+	Vector3(-108, 0, -195), Vector3(108, 0, -195), Vector3(-108, 0, 195), Vector3(108, 0, 195),
+	Vector3(-207, 0, -102), Vector3(207, 0, -102), Vector3(-207, 0, 102), Vector3(207, 0, 102),
 ]
 const OIL_NODES := [
-	Vector3(0, 0, 0), Vector3(-56, 0, -22), Vector3(56, 0, 22), Vector3(-56, 0, 22), Vector3(56, 0, -22),
+	Vector3(0, 0, 0), Vector3(-84, 0, -33), Vector3(84, 0, 33), Vector3(-84, 0, 33), Vector3(84, 0, -33),
 ]
 
 const BUILDER := {"name": "Builder", "cost": 120, "hp": 90, "dmg": 0, "rng": 0, "spd": 6.0, "cd": 1.0}
