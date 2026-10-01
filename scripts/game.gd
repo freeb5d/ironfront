@@ -2166,7 +2166,7 @@ func _explosion(pos: Vector3, s: float) -> void:
 	_flash_light(pos, 3.0 + 3.0 * s, 14.0 + 16.0 * s, 0.3)
 	_burst(pos, int(14 + 14 * s), 0.55 + 0.2 * s, 0.7 * s, Color(1.0, 0.45, 0.1), 5.0 + 4.0 * s, Vector3(0, 1.5, 0)) # fireball
 	_burst(pos, int(6 + 6 * s), 0.35, 0.5 * s, Color(1.0, 0.92, 0.55), 3.0 + 2.0 * s, Vector3.ZERO) # hot core
-	_burst(pos + Vector3(0, 1.0, 0), int(8 + 8 * s), 1.8 + 0.5 * s, 1.0 * s, Color(0.2, 0.19, 0.18, 0.8), 2.5 + 1.5 * s, Vector3(0, 2.2, 0)) # smoke
+	_burst(pos + Vector3(0, 1.0, 0), int(8 + 8 * s), 1.8 + 0.5 * s, 0.6 * s, Color(0.32, 0.3, 0.28, 0.55), 2.5 + 1.5 * s, Vector3(0, 2.2, 0)) # smoke
 	_burst(pos, int(10 + 10 * s), 0.7, 0.14, Color(1.0, 0.8, 0.3), 12.0 + 6.0 * s, Vector3(0, -14, 0)) # sparks
 	if s >= 1.0:
 		var ring: MeshInstance3D = MeshInstance3D.new()
